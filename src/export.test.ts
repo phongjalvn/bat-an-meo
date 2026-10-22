@@ -33,7 +33,7 @@ describe("default pet bowl export", () => {
     expect(model.insert?.positions.length).toBeGreaterThan(300);
     expect(model.parts.map((p) => p.name as string)).not.toContain("moat");
     expect(model.parts.map((p) => p.name as string)).not.toContain("stand");
-    expect(Math.abs(model.width - model.depth)).toBeLessThan(8);
+    expect(Math.abs(model.width - model.depth)).toBeLessThan(24);
 
     for (const part of model.parts) {
       expect(isPrintableManifold(part.mesh)).toBe(true);
@@ -44,7 +44,7 @@ describe("default pet bowl export", () => {
     const triCount = new DataView(stl.buffer, stl.byteOffset, stl.byteLength).getUint32(80, true);
     expect(triCount).toBeGreaterThan(100);
     expect(model.parts.some((p) => p.name === "text")).toBe(true);
-    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h103_w3p0_i130(_Boom)?/);
+    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d190_h103_w3p0_i130(_Boom)?/);
   });
 
   it("exports Bambu Lab and Snapmaker U1 3MF projects with part-to-filament mapping", async () => {
@@ -91,8 +91,21 @@ describe("single bowl only", () => {
     });
     expect((loaded as { doubleBowl?: boolean }).doubleBowl).toBeUndefined();
     expect(loaded.moatGap).toBe(8);
-    expect(loaded.trayHeight).toBe(22);
-    expect(loaded.islandHeight).toBe(40);
+    expect(loaded.windowEnabled).toBe(true);
+    expect(loaded.trayHeight).toBeCloseTo(60, 0);
+    expect(loaded.islandHeight).toBeCloseTo(25.7, 0);
+
+    const kept = normalizeParams({
+      linkBodyToInsert: false,
+      footHeight: 22,
+      standHeight: 40,
+      moatDistance: 8,
+      bodyDiameter: 190,
+      mouthShrink: 11,
+    });
+    expect(kept.trayHeight).toBe(22);
+    expect(kept.islandHeight).toBe(40);
+    expect(kept.moatGap).toBe(8);
   });
 
   it("builds one circular tray even when an old project asked for two bowls", async () => {
@@ -108,40 +121,43 @@ describe("single bowl only", () => {
 });
 
 describe("stainless insert sizes", () => {
-  it("sizes the tapered pocket plus lip counterbore from the measured bowls", () => {
+  it("scales the frustum, lip opening, and tray from the reference insert", () => {
     const sizedSmall = applyInsertSize(DEFAULT_PARAMS, "small");
     const pSmall = resolvedDims(sizedSmall);
     expect(pSmall.insertRim).toBe(130);
     expect(pSmall.mouthInner).toBe(110);
     expect(pSmall.baseR * 2).toBe(70);
     expect(pSmall.insertHeight).toBe(40);
-    expect(pSmall.pocketMouthR).toBeCloseTo(110 / 2 + pSmall.steel + pSmall.clearance, 4);
-    expect(pSmall.pocketBaseR).toBeCloseTo(70 / 2 + pSmall.clearance, 4);
-    expect(pSmall.pocketLipR).toBeCloseTo(130 / 2 + pSmall.clearance, 4);
-    expect(pSmall.pocketLipR).toBeGreaterThan(pSmall.pocketMouthR);
-    expect(pSmall.topR * 2).toBeGreaterThanOrEqual(minHolderDiameter(sizedSmall) - 0.01);
-    expect(minHolderDiameter(sizedSmall)).toBeCloseTo(130 + 2 * sizedSmall.wallThickness + 2 * sizedSmall.insertClearance, 4);
-    expect(sizedSmall.bodyDiameter).toBeCloseTo(150, 4);
-    expect(pSmall.topR * 2).toBeCloseTo(150, 4);
-    expect(pSmall.topR - pSmall.lipR).toBeCloseTo(sizedSmall.rimMargin, 4);
-    expect(pSmall.rx).toBeGreaterThan(pSmall.topR);
+    expect(sizedSmall.bodyDiameter).toBeCloseTo(190, 4);
+    expect(pSmall.topR * 2).toBeCloseTo(190, 4);
+    expect(pSmall.footR * 2).toBeCloseTo(168, 4);
+    expect(pSmall.footR).toBeLessThan(pSmall.topR - 4);
+    expect(pSmall.openR * 2).toBeCloseTo(146.6, 1);
+    expect(pSmall.flangeR * 2).toBeCloseTo(130.4, 0);
+    expect(pSmall.wall).toBeCloseTo(3, 4);
+    expect(pSmall.bodyH).toBeCloseTo(102.9, 4);
+    expect(pSmall.trayR * 2).toBeCloseTo(190, 4);
+    expect(pSmall.trayH).toBeCloseTo(60, 4);
+    expect(pSmall.deckZ).toBeCloseTo(25.7, 4);
     expect(pSmall.trayR * 2).toBeGreaterThanOrEqual(minTrayDiameter(sizedSmall) - 0.01);
-    expect(pSmall.trayR * 2 - pSmall.rx * 2).toBeGreaterThanOrEqual(10);
-    expect(pSmall.trayR * 2 - pSmall.rx * 2).toBeLessThanOrEqual(16);
+    expect(minHolderDiameter(sizedSmall)).toBeCloseTo(130 + 2 * sizedSmall.wallThickness + 2 * sizedSmall.insertClearance, 4);
 
-    const sizedLarge = applyInsertSize({ ...DEFAULT_PARAMS, bodyDiameter: 150 }, "large");
+    const sizedLarge = applyInsertSize({ ...DEFAULT_PARAMS, bodyDiameter: 190 }, "large");
     const pLarge = resolvedDims(sizedLarge);
     expect(pLarge.insertRim).toBe(190);
     expect(pLarge.mouthInner).toBe(160);
     expect(pLarge.baseR * 2).toBe(95);
     expect(pLarge.insertHeight).toBe(55);
-    expect(sizedLarge.bodyDiameter).toBeCloseTo(210, 4);
-    expect(pLarge.topR * 2).toBeCloseTo(210, 4);
-    expect(pLarge.pocketLipR).toBeGreaterThan(pLarge.pocketMouthR);
+    expect(sizedLarge.bodyDiameter).toBeCloseTo(190 * (190 / 130), 1);
+    expect(pLarge.topR * 2).toBeCloseTo(sizedLarge.bodyDiameter, 4);
+    expect(pLarge.openR * 2).toBeCloseTo(146.6 * (190 / 130), 0);
+    expect(pLarge.footR).toBeLessThan(pLarge.topR);
+    expect(sizedLarge.trayHeight).toBeCloseTo(60 * (190 / 130), 1);
 
-    const manual = applyInsertSize({ ...DEFAULT_PARAMS, linkBodyToInsert: false, bodyDiameter: 176 }, "small");
+    const manual = applyInsertSize({ ...DEFAULT_PARAMS, linkBodyToInsert: false, bodyDiameter: 210, height: 110 }, "small");
     expect(manual.linkBodyToInsert).toBe(false);
-    expect(manual.bodyDiameter).toBe(176);
+    expect(manual.bodyDiameter).toBe(210);
+    expect(manual.height).toBe(110);
     expect(manual.trayDiameter).toBeGreaterThanOrEqual(minTrayDiameter(manual) - 0.01);
   });
 
@@ -170,14 +186,16 @@ describe("stainless insert sizes", () => {
     expect(model.manifold).toBe(true);
   });
 
-  it("keeps a bottom floor under a tilted pocket so the insert cannot punch through", () => {
+  it("keeps an inward foot flange and a top lip under the tilted cut", () => {
     const care = PRESETS.find((p) => p.id === "cat-care")!.params;
     const p = resolvedDims(care);
-    const stem = p.extraDepth + p.insertHeight + p.lipT;
-    const frontZ = p.zFace - p.topR * Math.tan(p.tiltRad) - stem * Math.cos(p.tiltRad);
-    expect(p.extraDepth).toBeGreaterThanOrEqual(0.8);
-    expect(frontZ).toBeGreaterThan(p.zFootTop + p.socketH + p.bottom - 2);
-    expect(p.bottom).toBeGreaterThanOrEqual(1.6);
+    expect(p.flangeR).toBeLessThan(p.footR - p.wall);
+    expect(p.flangeH).toBeGreaterThan(2);
+    expect(p.flangeH).toBeLessThan(6);
+    expect(p.openR).toBeLessThan(p.topR - p.wall);
+    expect(p.lipH).toBeGreaterThan(2);
+    expect(p.zCut).toBeGreaterThan(p.bodyH);
+    expect(p.bodyH).toBeGreaterThan(90);
   });
 
   it("uses Small 11 cm on cat presets and Large 16 cm on dog presets", () => {
@@ -205,6 +223,7 @@ describe("tray moat and centering fit", () => {
     expect(model.stability.stable).toBe(true);
     expect(model.parts.map((p) => p.name)).toEqual(expect.arrayContaining(["body", "base"]));
     expect(model.parts.map((p) => p.name as string)).not.toContain("moat");
+    expect(model.pegRadius).toBeGreaterThan(70);
     expect(model.socketRadius).toBeCloseTo(model.pegRadius + model.fitClearance, 4);
 
     for (const part of model.parts) {
@@ -214,7 +233,8 @@ describe("tray moat and centering fit", () => {
 
     const base = model.parts.find((p) => p.name === "base")!;
     const zs = extrema(base.mesh.positions, 2);
-    expect(zs.max - zs.min).toBeGreaterThan(params.moatDepth + params.trayHeight * 0.4);
+    expect(zs.max - zs.min).toBeGreaterThan(55);
+    expect(zs.max - zs.min).toBeLessThan(63);
 
     const u1 = await buildThreeMf(model, "snapmaker-u1");
     expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual(
@@ -234,17 +254,18 @@ describe("tray moat and centering fit", () => {
     expect(xml).not.toContain('key="name" value="moat"');
 
     const p = resolvedDims(params);
-    expect(p.islandR / p.rx).toBeGreaterThan(0.76);
-    expect(p.islandR / p.rx).toBeLessThan(0.86);
-    expect(p.pegR / p.rx).toBeGreaterThan(0.64);
-    expect(p.pegR / p.rx).toBeLessThan(0.73);
-    expect(p.moatOuter - p.moatInner).toBeCloseTo(p.moatWidth, 4);
-    expect(p.trayR).toBeGreaterThan(p.moatOuter + p.wall - 0.2);
+    expect(p.moatOuter - p.moatInner).toBeGreaterThan(2);
+    expect(p.moatOuter - p.moatInner).toBeLessThan(p.moatWidth + 0.2);
+    expect(p.trayR).toBeGreaterThan(p.moatOuter + p.wall * 0.4);
+    expect(p.deckZ).toBeGreaterThan(20);
+    expect(p.moatInner).toBeGreaterThan(p.footR);
 
-    const waterTop = p.floorT + p.moatDepth;
-    const ring = [...radiiNear(base.mesh.positions, p.floorT, 0.6), ...radiiNear(base.mesh.positions, waterTop, 0.6)];
-    expect(ring.some((r) => Math.abs(r - p.moatInner) < 2.5)).toBe(true);
-    expect(ring.some((r) => Math.abs(r - p.moatOuter) < 2.5)).toBe(true);
+    const ring = radiiNear(base.mesh.positions, p.deckZ, 1.2);
+    expect(ring.some((r) => Math.abs(r - p.moatInner) < 2.2)).toBe(true);
+    expect(ring.some((r) => Math.abs(r - p.moatOuter) < 2.2)).toBe(true);
+    const dome = sliceMaxRadius(base.mesh.positions, base.mesh.indices, 8);
+    expect(dome).toBeGreaterThan(45);
+    expect(dome).toBeLessThan(p.trayR - 8);
   });
 
   it("wraps name, second line, and icons on the cylinder", async () => {
@@ -282,99 +303,91 @@ describe("tray moat and centering fit", () => {
 });
 
 describe("reference silhouette", () => {
-  it("keeps an upright circular wall and matches ref1/ref2 defaults", async () => {
-    const model = await buildBowl(DEFAULT_PARAMS, font);
-    const p = resolvedDims(DEFAULT_PARAMS);
+  it("flares upward and matches the reference body and tray", async () => {
+    const flat = {
+      ...DEFAULT_PARAMS,
+      tiltDeg: 0,
+      windowEnabled: false,
+      text: "",
+      textLine2: "",
+      icons: DEFAULT_PARAMS.icons.map((icon) => ({ ...icon, enabled: false })),
+    };
+    const model = await buildBowl(flat, font);
+    const p = resolvedDims(flat);
     const body = model.parts.find((part) => part.name === "body")!;
     const base = model.parts.find((part) => part.name === "base")!;
 
-    expect(p.topR * 2).toBeCloseTo(150, 4);
-    expect(p.topR - p.lipR).toBeGreaterThan(8);
-    expect(p.topR - p.lipR).toBeLessThan(12);
-    expect(p.rx).toBeGreaterThan(p.topR + 3);
-    expect(p.neckR).toBeLessThan(p.rx - 4);
-    expect(p.bodyH).toBeCloseTo(103, 4);
-    expect(p.trayR * 2 - p.rx * 2).toBeGreaterThanOrEqual(10);
-    expect(p.trayR * 2 - p.rx * 2).toBeLessThanOrEqual(16);
-    expect(p.trayH).toBeGreaterThanOrEqual(20);
-    expect(p.trayH).toBeLessThanOrEqual(25);
-    expect(p.rimT).toBeGreaterThanOrEqual(4);
-    expect(p.rimT).toBeLessThanOrEqual(5);
-    expect(p.islandH).toBeLessThan(p.trayH - 6);
-    expect(p.neckR).toBeLessThan(p.wallInner - 3);
+    expect(p.topR * 2).toBeCloseTo(190, 4);
+    expect(p.footR * 2).toBeCloseTo(168, 4);
+    expect(p.footR).toBeLessThan(p.topR);
+    expect(p.openR * 2).toBeCloseTo(146.6, 1);
+    expect(p.bodyH).toBeCloseTo(102.9, 4);
     expect(p.wall).toBeCloseTo(3, 4);
+    expect(p.trayR * 2).toBeCloseTo(190, 4);
+    expect(p.trayH).toBeCloseTo(60, 4);
+    expect(p.deckZ).toBeCloseTo(25.7, 4);
+    expect(model.manifold).toBe(true);
+    for (const part of model.parts) expect(isPrintableManifold(part.mesh)).toBe(true);
 
-    const midLo = p.zFootTop + p.bodyH * 0.35;
-    const midHi = p.zFootTop + p.bodyH * 0.55;
-    const ring: number[] = [];
-    let xMin = Infinity;
-    let xMax = -Infinity;
-    let yMin = Infinity;
-    let yMax = -Infinity;
-    let n = 0;
-    for (let i = 0; i < body.mesh.positions.length; i += 3) {
-      const z = body.mesh.positions[i + 2];
-      if (z < midLo || z > midHi) continue;
-      const x = body.mesh.positions[i];
-      const y = body.mesh.positions[i + 1];
-      const r = Math.hypot(x, y);
-      if (r < p.neckR - 4) continue;
-      ring.push(r);
-      xMin = Math.min(xMin, x);
-      xMax = Math.max(xMax, x);
-      yMin = Math.min(yMin, y);
-      yMax = Math.max(yMax, y);
-      n++;
-    }
-    expect(ring.length).toBeGreaterThan(20);
-    const rMin = Math.min(...ring);
-    const rMax = Math.max(...ring);
-    expect(rMax - rMin).toBeLessThan(10);
-    expect(rMax).toBeLessThan(p.rx + 3);
-    expect(rMin).toBeGreaterThan(p.topR - 4);
-    expect(n).toBeGreaterThan(20);
-    expect(Math.abs(xMax + xMin)).toBeLessThan(4);
-    expect(Math.abs(yMax + yMin)).toBeLessThan(4);
-    expect(Math.abs(xMax - xMin - (yMax - yMin))).toBeLessThan(8);
+    const footZ = p.deckLift + 1.4;
+    const footRs = sliceRadii(body.mesh.positions, body.mesh.indices, footZ).filter((r) => r > 20);
+    expect(footRs.some((r) => Math.abs(r - p.flangeR) < 1.4)).toBe(true);
+    expect(Math.max(...footRs)).toBeGreaterThan(p.footR - 1.6);
+    expect(Math.max(...footRs)).toBeLessThan(p.footR + 1.6);
+
+    const wallZ = p.deckLift + 55;
+    const wallRs = sliceRadii(body.mesh.positions, body.mesh.indices, wallZ).filter((r) => r > 30);
+    const outer = Math.max(...wallRs);
+    const inner = wallRs.filter((r) => r < outer - 1.2).reduce((m, r) => Math.max(m, r), 0);
+    expect(Math.abs(outer - (p.footR + p.slope * 55))).toBeLessThan(1.3);
+    expect(outer - inner).toBeGreaterThan(2.4);
+    expect(outer - inner).toBeLessThan(3.8);
+
+    const lipZ = p.deckLift + p.bodyH - 0.7;
+    const lipRs = sliceRadii(body.mesh.positions, body.mesh.indices, lipZ).filter((r) => r > 8);
+    expect(Math.abs(Math.min(...lipRs) - p.openR)).toBeLessThan(1.6);
+
+    const lowR = sliceMaxRadius(body.mesh.positions, body.mesh.indices, p.deckLift + 12);
+    const highR = sliceMaxRadius(body.mesh.positions, body.mesh.indices, p.deckLift + 80);
+    expect(highR).toBeGreaterThan(lowR + 4);
+    expect(lowR).toBeLessThan(p.topR - 2);
 
     const bodyVol = body.volumeMm3;
     const trayVol = base.volumeMm3;
-    expect(bodyVol).toBeLessThan(350_000);
     expect(bodyVol).toBeGreaterThan(80_000);
-    expect(trayVol).toBeLessThan(700_000);
-    expect(model.solidVolumeMm3).toBeLessThan(1_100_000);
+    expect(bodyVol).toBeLessThan(500_000);
+    expect(trayVol).toBeGreaterThan(200_000);
+    expect(trayVol).toBeLessThan(1_000_000);
+    expect(model.solidVolumeMm3).toBeLessThan(1_600_000);
 
-    expect(p.neckR).toBeLessThan(p.trayR - 8);
-    const neckBand: number[] = [];
-    for (let i = 0; i < body.mesh.positions.length; i += 3) {
-      const z = body.mesh.positions[i + 2];
-      if (z < p.islandH + 1 || z > p.trayH + 2) continue;
-      const r = Math.hypot(body.mesh.positions[i], body.mesh.positions[i + 1]);
-      if (r > p.socketR + 2) neckBand.push(r);
-    }
-    expect(neckBand.length).toBeGreaterThan(8);
-    expect(Math.max(...neckBand)).toBeLessThan(p.trayR - 4);
+    const opened = await buildBowl({ ...flat, windowEnabled: true }, font);
+    const openedBody = opened.parts.find((part) => part.name === "body")!;
+    expect(isPrintableManifold(openedBody.mesh)).toBe(true);
+    const zWin = p.deckLift + (p.winZ0 + p.winZ1) / 2;
+    const front = slicePoints(openedBody.mesh.positions, openedBody.mesh.indices, zWin).filter((hit) => {
+      return Math.abs(hit.ang + Math.PI / 2) < 0.28 && hit.r > p.footR - 6;
+    });
+    const side = slicePoints(openedBody.mesh.positions, openedBody.mesh.indices, zWin).filter((hit) => {
+      return Math.abs(hit.ang) < 0.28 && hit.r > p.footR - 6;
+    });
+    expect(front.length).toBe(0);
+    expect(side.length).toBeGreaterThan(0);
 
-    const insert = model.insert!;
-    let izMax = -Infinity;
-    let izMin = Infinity;
-    for (let i = 2; i < insert.positions.length; i += 3) {
-      izMax = Math.max(izMax, insert.positions[i]);
-      izMin = Math.min(izMin, insert.positions[i]);
-    }
-    expect(izMax - p.zFront).toBeGreaterThan(-8);
-    expect(izMax).toBeGreaterThan(p.zFront - 2);
-
-    const z0 = p.zShoulder + p.zCyl0 + 3;
-    const z1 = p.zBack - 5;
-    let prev = 0;
-    for (let z = z0; z <= z1; z += 3) {
-      const r = sliceMaxRadius(body.mesh.positions, body.mesh.indices, z);
-      expect(r).toBeGreaterThan(p.topR - 1.6);
-      expect(r).toBeLessThan(p.topR + 1.3);
-      if (prev) expect(Math.abs(r - prev)).toBeLessThan(2.5);
-      prev = r;
-    }
+    const tilted = await buildBowl(DEFAULT_PARAMS, font);
+    const tp = resolvedDims(DEFAULT_PARAMS);
+    expect(tilted.tiltDeg).toBe(15);
+    expect(tilted.manifold).toBe(true);
+    const rise = sliceMaxRadius(
+      tilted.parts.find((part) => part.name === "body")!.mesh.positions,
+      tilted.parts.find((part) => part.name === "body")!.mesh.indices,
+      tp.deckLift + 70,
+    );
+    const baseR = sliceMaxRadius(
+      tilted.parts.find((part) => part.name === "body")!.mesh.positions,
+      tilted.parts.find((part) => part.name === "body")!.mesh.indices,
+      tp.deckLift + 12,
+    );
+    expect(rise).toBeGreaterThan(baseR + 3);
   });
 });
 
@@ -389,8 +402,8 @@ describe("icon outlines", () => {
   });
 });
 
-function sliceMaxRadius(positions: Float32Array, indices: Uint32Array, z: number): number {
-  let maxR = 0;
+function sliceHits(positions: Float32Array, indices: Uint32Array, z: number): Array<{ r: number; ang: number }> {
+  const hits: Array<{ r: number; ang: number }> = [];
   for (let i = 0; i < indices.length; i += 3) {
     const ids = [indices[i], indices[i + 1], indices[i + 2]];
     const zs = ids.map((id) => positions[id * 3 + 2]);
@@ -406,10 +419,22 @@ function sliceMaxRadius(positions: Float32Array, indices: Uint32Array, z: number
       if (t < -1e-3 || t > 1 + 1e-3) continue;
       const x = positions[a * 3] + (positions[b * 3] - positions[a * 3]) * t;
       const y = positions[a * 3 + 1] + (positions[b * 3 + 1] - positions[a * 3 + 1]) * t;
-      maxR = Math.max(maxR, Math.hypot(x, y));
+      hits.push({ r: Math.hypot(x, y), ang: Math.atan2(y, x) });
     }
   }
-  return maxR;
+  return hits;
+}
+
+function sliceRadii(positions: Float32Array, indices: Uint32Array, z: number): number[] {
+  return sliceHits(positions, indices, z).map((hit) => hit.r);
+}
+
+function slicePoints(positions: Float32Array, indices: Uint32Array, z: number): Array<{ r: number; ang: number }> {
+  return sliceHits(positions, indices, z);
+}
+
+function sliceMaxRadius(positions: Float32Array, indices: Uint32Array, z: number): number {
+  return sliceRadii(positions, indices, z).reduce((m, r) => Math.max(m, r), 0);
 }
 
 function radiiNear(positions: Float32Array, z: number, tol: number) {

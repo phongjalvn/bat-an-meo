@@ -27,8 +27,8 @@ import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
 
-const SIZE_KEYS = ["bodyDiameter", "rimMargin", "height", "mouthShrink", "trayDiameter", "trayHeight", "rimRadius"] as const;
-const STRUCT_KEYS = ["wallThickness", "bottomThickness", "islandHeight", "insertClearance", "fitClearance"] as const;
+const SIZE_KEYS = ["bodyDiameter", "height", "mouthShrink", "trayDiameter", "trayHeight", "rimRadius"] as const;
+const STRUCT_KEYS = ["wallThickness", "bottomThickness", "islandHeight", "fitClearance"] as const;
 const CATCARE_KEYS = ["tiltDeg"] as const;
 const MOAT_KEYS = ["moatWidth", "moatDepth", "moatGap"] as const;
 const CUSTOM_INSERT_KEYS = [
@@ -188,7 +188,9 @@ export class App {
         "structure",
         L("structure"),
         this.open.structure,
-        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") + this.toggle("antiSlipGroove", L("antiSlip")),
+        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
+          this.toggle("antiSlipGroove", L("antiSlip")) +
+          this.toggle("windowEnabled", L("window")),
       )}
       ${section(
         "catCare",
@@ -363,7 +365,7 @@ export class App {
     `;
   }
 
-  private toggle(key: "antiSlipGroove" | "moatEnabled", label: string): string {
+  private toggle(key: "antiSlipGroove" | "moatEnabled" | "windowEnabled", label: string): string {
     return `<label class="check">${label}<input type="checkbox" data-toggle="${key}" ${this.params[key] ? "checked" : ""} /></label>`;
   }
 
@@ -482,13 +484,11 @@ export class App {
         }
         if (key === "bodyDiameter") this.params.linkBodyToInsert = false;
         if (key === "insertHeight") this.params.innerDepth = value;
-        if (this.params.linkBodyToInsert && (key === "rimMargin" || key === "insertLipDiameter" || key === "mouthShrink")) {
-          if (key !== "mouthShrink") {
-            this.params.bodyDiameter = this.params.insertLipDiameter + 2 * this.params.rimMargin;
+        if (this.params.linkBodyToInsert && key === "insertLipDiameter") {
+          this.params = applyInsertSize(this.params, "custom");
+          for (const synced of ["bodyDiameter", "mouthShrink", "height", "trayDiameter", "trayHeight", "islandHeight"] as const) {
+            this.syncTwinInputs(synced, this.params[synced]);
           }
-          this.params.trayDiameter = this.params.bodyDiameter + 2 * this.params.mouthShrink + 13;
-          this.syncTwinInputs("bodyDiameter", this.params.bodyDiameter);
-          this.syncTwinInputs("trayDiameter", this.params.trayDiameter);
         }
         this.fitHolderToInsert();
         this.saved = false;
@@ -498,7 +498,7 @@ export class App {
     });
     document.querySelectorAll("[data-toggle]").forEach((el) => {
       el.addEventListener("change", () => {
-        const key = (el as HTMLElement).dataset.toggle as "antiSlipGroove" | "moatEnabled";
+        const key = (el as HTMLElement).dataset.toggle as "antiSlipGroove" | "moatEnabled" | "windowEnabled";
         this.params[key] = (el as HTMLInputElement).checked;
         this.saved = false;
         if (key === "moatEnabled") {
@@ -655,11 +655,6 @@ export class App {
     if (this.params.bodyDiameter < minD) {
       this.params.bodyDiameter = minD;
       this.syncTwinInputs("bodyDiameter", minD);
-    }
-    const minH = this.params.insertHeight + this.params.bottomThickness + 16;
-    if (this.params.height < minH) {
-      this.params.height = minH;
-      this.syncTwinInputs("height", minH);
     }
     const minTray = minTrayDiameter(this.params);
     if (this.params.trayDiameter < minTray) {

@@ -2,16 +2,16 @@
 
 Vietnamese-first web app that designs a 3D-printable pet bowl and exports slicer-ready files.
 
-The holder is an upright, slightly tapered cone — wider at the visible base, narrower at the top — with a rounded lip that is one continuous fillet on the tilted face. Only the top face is cut at 0–15° (low at the front); the stainless-insert pocket is drilled perpendicular to that face so the bowl sits deep and only its rolled rim shows. The top diameter follows the insert: lip diameter plus a 10 mm margin each side (Small ≈ Ø150, Large ≈ Ø210), with a manual override. At the bottom the body cinches into a recessed neck that drops into a low circular tray, about 20–25 mm tall and 10–16 mm wider than the body, with a thin rounded rim. The dark ring between neck and rim is the in-dish anti-ant moat. A centering island/peg scales with the body. Geometry is generated with lathe/revolve profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
+The body is a straight frustum that widens upward, matching the reference shell: about Ø168 at the foot and Ø190 at the top for the Small insert, a constant 3 mm wall, and a height of 102.9 mm on the low side. The top is cut at 0–15° (low at the front, about 13–15° for cats) and finished with one continuous radial fillet. The stainless insert hangs in a top ring lip (Ø146.6 opening for Small) — there is no deep internal shelf. The bottom is open, with a thin inward foot flange. An optional oval window cuts the front wall near the foot. The tray follows the reference dish: Ø190, a 60 mm wall about 3 mm thick, a solid domed underside, and a flat deck near z = 26 mm that the body sits on. A water moat is cut into that deck between the foot and the tray wall, and a low rib locates the foot. Every major diameter and height scales with the insert lip (Small 130, Large 190, or Custom). Geometry is generated with lathe profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
 
 ## Features
 
 - Live 3D preview with orbit, front/top/side cameras, zoom, and a reference plate that is not exported
 - Stainless insert sizes from the real bowls: **Nhỏ 11 cm** (lip 130 / mouth 110 / base 70 / height 40 mm) and **Lớn 16 cm** (lip 190 / mouth 160 / base 95 / height 55 mm), plus Custom for those four measurements
-- Pocket follows the tapered bowl plus clearance, with a shallow counterbore for the rolled rim lip. The body top is the insert lip plus two margins (default 10 mm each side); the base follows the taper, and the neck, island, peg, and tray scale with it
+- Top lip opening follows the reference (Ø146.6 for a 130 mm insert lip) and scales with the selected insert. The steel mesh is preview-only
 - Single bowl only. Saved projects that still carry a double-bowl flag load as one bowl (that field is ignored)
-- Design sliders for body and tray size, top taper, wall/bottom thickness, island height, rounded rim, 0–15° cat tilt, centering-fit clearance, anti-slip groove
-- Anti-hunch (tilted top face, upright walls) and an anti-ant water moat that reads as the dark ring around the neck
+- Design sliders for top diameter, upward flare, body height, tray size, deck height, wall thickness, rounded rim, 0–15° cat tilt, foot clearance, and the oval window
+- Anti-hunch tilted top and an anti-ant water moat in the deck between the body foot and the tray wall
 - Name plus optional date line, wrapped on the front: large name, icon beside it, small date underneath; engraved inlay or flush emboss
 - Customizable icons (paw, cat, dog, heart, fish, bone, star) or uploaded SVG / PNG; per-icon placement, size, and rotation
 - Base textures: smooth, vertical ribs, twisted ribs
@@ -43,10 +43,10 @@ Open the printed local URL (default `http://localhost:5173`).
 - both 3MF archives contain the Bambu/Orca files (`3D/3dmodel.model`, `Metadata/project_settings.config`, `Metadata/model_settings.config`, plate metadata, thumbnails)
 - body / base / text map to filament slots 1 / 2 / 3; the moat is part of the tray, not a fourth object
 - Snapmaker U1 uses `filament_maps` `1 2 3 4`; Bambu uses AMS-style `1 1 1 1`
-- Small (11 cm) and Large (16 cm) insert presets set pocket + holder diameter; Custom keeps measured lip / mouth / base / height
+- Small (11 cm) and Large (16 cm) insert presets scale the frustum, opening, and tray from the reference; Custom keeps measured lip / mouth / base / height
 - the anti-hunch / anti-ant preset keeps a watertight moat floor inside the tray
 - a saved `doubleBowl` flag is ignored and the mesh stays one circular tray
-- the default body stays circular/upright, tapers wider at the base, and sizes the top to the insert lip plus a 10 mm margin, with the tray 10–16 mm larger than that base
+- the default body flares upward (foot about Ø168, top Ø190), the lip opening is about Ø146.6, and the tray is about Ø190 × 60 mm with a deck near 26 mm
 
 ## Deploy to GitHub Pages
 
@@ -70,12 +70,12 @@ GITHUB_PAGES=true npm run build
 ## Print notes
 
 - Units are millimetres.
-- The steel insert is display-only and is omitted from STL/3MF. The printed pocket holds a real Small 11 cm or Large 16 cm insert by the rim lip.
+- The steel insert is display-only and is omitted from STL/3MF. The printed top lip is the reference opening (wider than the steel lip, Ø146.6 for Small).
 - 3MF files open as unsliced multi-color projects. Re-slice in Bambu Studio or Snapmaker Orca before printing.
 - Wrapped text and icons are a separate part so they can print in a second color.
-- The anti-ant moat is a channel inside the tray (same filament as the base). Fill it with water after printing; keep the floor ≥ 1.2 mm.
-- The body sockets onto the tray island. Increase centering-fit clearance if the peg is too tight for your printer.
-- Tilted cat bowls sit on a flat cut so the center of mass stays inside the tray. Chamfers stay ≤ 45° so the stand prints without supports.
+- The anti-ant moat is a channel in the tray deck (same filament as the base), between the body foot and the outer wall. Fill it with water after printing. The floor under the channel stays at least 2 mm; the dome underside drops only under that ring so the channel can be deep.
+- The body sits on the deck. A low rib just outside the foot locates it. Increase foot clearance if the fit is tight.
+- Tilted cat bowls keep the low side near the reference height and rise toward the back. The center of mass stays inside the tray.
 
 ## Limitations
 
