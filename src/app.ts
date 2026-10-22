@@ -23,6 +23,8 @@ import { t, type StringKey } from "./i18n/strings";
 import { PRESETS } from "./presets";
 import { createProject, loadActiveId, loadProjects, saveProjects, setActiveId, type SavedProject } from "./persist";
 import { BowlViewer, type CameraView } from "./ui/viewer";
+import { modelToScad } from "./export/scad";
+import { renderOpenScadModel } from "./geometry/openscad";
 import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
@@ -139,6 +141,7 @@ export class App {
           <aside class="panel right">${this.rightPanel()}</aside>
         </div>
         <div class="menu" id="export-menu" hidden>
+          <button data-export="scad">OpenSCAD (.scad)</button>
           <button data-export="stl">${L("exportStl")}</button>
           <button data-export="bambu">${L("exportBambu")}</button>
           <button data-export="u1">${L("exportU1")}</button>
@@ -181,23 +184,23 @@ export class App {
           <div class="hint">${L("insertHint")}</div>
         </div>
         ${custom ? CUSTOM_INSERT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""}
-        ${(this.params.referenceShape ? [] : SIZE_KEYS).map((key) => this.slider(key, L(labelFor(key)))).join("")}
+        ${SIZE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("")}
       `,
       )}
       ${section(
         "structure",
         L("structure"),
         this.open.structure,
-        (this.params.referenceShape ? [] : STRUCT_KEYS).map((key) => this.slider(key, L(labelFor(key)))).join("") +
-          (this.params.referenceShape ? `<div class="hint">Giữ nguyên vỏ, chân lắp, cửa thoáng và khay nước từ STL mẫu. Chỉ phần trên nghiêng theo góc đã chọn.</div>` : this.toggle("antiSlipGroove", L("antiSlip")) + this.toggle("windowEnabled", L("window"))),
+        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
+          this.toggle("windowEnabled", L("window")),
       )}
       ${section(
         "catCare",
         L("catCare"),
         this.open.catCare,
         CATCARE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
-          (this.params.referenceShape ? `<div class="hint">Khay chống kiến dùng nguyên lòng khay STL mẫu. Đổ nước quanh chân đỡ, giữ mực nước dưới cửa thoáng.</div>` : this.toggle("moatEnabled", L("moatEnabled"))) +
-          (!this.params.referenceShape && this.params.moatEnabled ? MOAT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""),
+          this.toggle("moatEnabled", L("moatEnabled")) +
+          (this.params.moatEnabled ? MOAT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""),
       )}
       ${section(
         "personalize",
@@ -229,7 +232,7 @@ export class App {
         ${this.iconEditors()}
       `,
       )}
-      ${!this.params.referenceShape ? section(
+      ${section(
         "texture",
         L("baseTexture"),
         this.open.texture,
@@ -239,7 +242,7 @@ export class App {
         </div>
         ${this.slider("ribCount", L("ribCount"))}
       `,
-      ) : ""}
+      )}
     `;
   }
 
@@ -397,7 +400,7 @@ export class App {
     q("#export-menu")?.addEventListener("click", (event) => {
       const btn = (event.target as HTMLElement).closest("[data-export]");
       if (!(btn instanceof HTMLElement)) return;
-      void this.exportNow(btn.dataset.export as "stl" | "bambu" | "u1");
+      void this.exportNow(btn.dataset.export as "stl" | "bambu" | "u1" | "scad");
       hide("#export-menu");
     });
     q("#new-project")?.addEventListener("click", () => {
@@ -481,7 +484,7 @@ export class App {
         ) {
           this.params.insertSize = "custom";
         }
-        if (key === "bodyDiameter") this.params.linkBodyToInsert = false;
+        if (([...SIZE_KEYS, "islandHeight"] as readonly string[]).includes(key)) this.params.linkBodyToInsert = false;
         if (key === "insertHeight") this.params.innerDepth = value;
         if (this.params.linkBodyToInsert && key === "insertLipDiameter") {
           this.params = applyInsertSize(this.params, "custom");
@@ -759,17 +762,33 @@ export class App {
     this.syncInfo();
   }
 
-  private async exportNow(kind: "stl" | "bambu" | "u1") {
-    if (!this.model) this.model = await buildBowl(this.params, this.font);
-    const stem = exportFileStem(this.params);
-    if (kind === "stl") {
-      downloadBlob(`${stem}.stl`, modelToBinaryStl(this.model), "model/stl");
-      return;
+  private async exportNow(kind: "stl" | "bambu" | "u1" | "scad") {
+    const button = document.querySelector<HTMLButtonElement>("#export");
+    if(button?.disabled) return;
+    const params = structuredClone(this.params);
+    const stem = exportFileStem(params);
+    if(button) { button.disabled = true; button.textContent = kind === "scad" ? "Đang xuất…" : "OpenSCAD đang render…"; }
+    try {
+      const preview = await buildBowl(params, this.font);
+      if(kind === "scad") {
+        downloadBlob(`${stem}.scad`,new TextEncoder().encode(modelToScad(params,preview)),"text/plain");
+        return;
+      }
+      const model = await renderOpenScadModel(params,preview);
+      if(kind === "stl") {
+        downloadBlob(`${stem}.stl`,modelToBinaryStl(model),"model/stl");
+        return;
+      }
+      const target: ThreeMfTarget = kind === "bambu" ? "bambu" : "snapmaker-u1";
+      const result = await buildThreeMf(model,target);
+      downloadBlob(`${stem}_${kind}.3mf`,result.bytes,"model/3mf");
+    } catch(error) {
+      alert(`Không xuất được file: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      if(button) { button.disabled = false; button.textContent = t(this.locale,"export"); }
     }
-    const target: ThreeMfTarget = kind === "bambu" ? "bambu" : "snapmaker-u1";
-    const result = await buildThreeMf(this.model, target);
-    downloadBlob(`${stem}_${kind}.3mf`, result.bytes, "model/3mf");
   }
+
 }
 
 function section(id: string, title: string, open: boolean, body: string): string {

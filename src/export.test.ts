@@ -199,7 +199,7 @@ describe("stainless insert sizes", () => {
     expect(p.flangeH).toBeLessThan(6);
     expect(p.openR).toBeLessThan(p.topR - p.wall);
     expect(p.lipH).toBeGreaterThan(2);
-    expect(p.zCut).toBeGreaterThan(p.bodyH);
+    expect(p.zCut).toBe(p.bodyH);
     expect(p.bodyH).toBeGreaterThan(90);
   });
 
@@ -490,26 +490,34 @@ async function assertThreeMf(
 }
 
 
-describe("supplied STL product", () => {
-  it("keeps the reference tray volume and produces closed personalized parts at both tilt limits", async () => {
+describe("clean parametric product", () => {
+  it("builds clean upright parts with a flat base and a narrower mouth at both tilt limits", async () => {
     for (const tiltDeg of [0, 15]) {
       const model = await buildBowl({ ...REFERENCE_DEFAULTS, tiltDeg, text: "Bầu", textLine2: "" }, font);
       expect(model.manifold).toBe(true);
       const base = model.parts.find(p => p.name === "base")!;
-      expect(base.volumeMm3).toBeCloseTo(493314.87, 0);
+      expect(base.volumeMm3).toBeGreaterThan(100000);
+      const bottom = sliceRadii(base.mesh.positions, base.mesh.indices, 0.5);
+      expect(Math.max(...bottom)).toBeGreaterThan(92);
+      // A flat outer foot supports the tray; the dome rises inside the shell.
+      const raised = sliceRadii(base.mesh.positions, base.mesh.indices, 55);
+      expect(Math.max(...raised)).toBeLessThan(70);
       expect(model.width).toBeCloseTo(190, 0);
       for (const part of model.parts) expect(isPrintableManifold(part.mesh), part.name).toBe(true);
       // The opening seat must stop a 130 mm steel lip, while clearing its 111.4 mm outer mouth.
       const body = model.parts.find(p => p.name === "body")!;
       if (tiltDeg === 0) {
-        const radii = sliceRadii(body.mesh.positions, body.mesh.indices, REFERENCE_DEFAULTS.islandHeight + REFERENCE_DEFAULTS.height - 1);
+        const lower = sliceRadii(body.mesh.positions, body.mesh.indices, resolvedDims(REFERENCE_DEFAULTS).deckLift + 5);
+        const upper = sliceRadii(body.mesh.positions, body.mesh.indices, resolvedDims(REFERENCE_DEFAULTS).deckLift + REFERENCE_DEFAULTS.height - 5);
+        expect(Math.max(...lower)).toBeGreaterThan(Math.max(...upper) + 6);
+        const radii = sliceRadii(body.mesh.positions, body.mesh.indices, resolvedDims(REFERENCE_DEFAULTS).deckLift + REFERENCE_DEFAULTS.height - 1);
         expect(radii.some(r => r > 55.7 && r < 56.5)).toBe(true);
       }
       const bytes = modelToBinaryStl(model);
       expect(new DataView(bytes.buffer).getUint32(80, true)).toBe(model.triangleCount);
     }
   });
-  it("scales the source for the large insert without opening mesh boundaries", async () => {
+  it("scales the clean design for the large insert without opening mesh boundaries", async () => {
     const model = await buildBowl(applyInsertSize({ ...REFERENCE_DEFAULTS, text: "Jimmy", textLine2: "", textStyle: "emboss" }, "large"), font);
     expect(model.manifold).toBe(true);
     for (const part of model.parts) expect(isPrintableManifold(part.mesh), part.name).toBe(true);
@@ -526,4 +534,17 @@ it("preserves the counter inside a round name glyph", () => {
   expect(section.area()).toBeGreaterThan(0);
   expect(section.area()).toBeLessThan(largest * 0.8);
   section.delete();
+});
+
+it("applies thickness, stand height and both base textures to real solids", async()=>{
+  const plain=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],tiltDeg:0});
+  const base=plain.parts.find(p=>p.name==="base")!;
+  const thick=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],wallThickness:4,bottomThickness:4,islandHeight:35});
+  expect(thick.parts.find(p=>p.name==="base")!.volumeMm3).toBeGreaterThan(base.volumeMm3);
+  for(const baseTexture of ["ribs","twist"] as const){
+    const textured=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],baseTexture,ribCount:24});
+    const part=textured.parts.find(p=>p.name==="base")!;
+    expect(part.volumeMm3).toBeLessThan(base.volumeMm3);
+    expect(isPrintableManifold(part.mesh)).toBe(true);
+  }
 });

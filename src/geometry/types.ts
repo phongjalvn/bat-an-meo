@@ -52,9 +52,9 @@ export function cloneIcons(icons: IconSlot[] | undefined): IconSlot[] {
 }
 
 export interface BowlParams {
-  /** Preserve the supplied two-piece STL geometry. */
+  /** Use the clean upright parametric design; legacy lathe mode remains optional. */
   referenceShape: boolean;
-  /** Outer diameter at the top of the upward frustum. */
+  /** Maximum body diameter at the lower edge in the upright design. */
   bodyDiameter: number;
   /** When true, top, flare, height, tray, and deck follow the insert lip. */
   linkBodyToInsert: boolean;
@@ -64,7 +64,7 @@ export interface BowlParams {
   innerDepth: number;
   wallThickness: number;
   bottomThickness: number;
-  /** Radial upward flare: top radius minus foot radius, mm. */
+  /** Radial reduction from the lower body to the mouth, mm. */
   mouthShrink: number;
   trayDiameter: number;
   trayHeight: number;

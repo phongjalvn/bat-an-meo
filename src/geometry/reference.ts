@@ -1,54 +1,78 @@
 import type { Manifold } from "manifold-3d";
 import { getEngine } from "./wasm";
-import type { MeshArrays } from "./types";
 
-const cache = new Map<string, Promise<MeshArrays>>();
-async function load(name: string): Promise<MeshArrays> {
-  if (!cache.has(name)) cache.set(name, (async () => {
-    let bytes: ArrayBuffer;
-    if (typeof process !== "undefined" && process.versions?.node && typeof window === "undefined") {
-      const moduleName = "node:fs/promises";
-      const fs = await import(/* @vite-ignore */ moduleName);
-      const b = await fs.readFile(`${process.cwd()}/public/reference/${name}.bin`);
-      bytes = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
-    } else {
-      const response = await fetch(`${import.meta.env.BASE_URL}reference/${name}.bin`);
-      if (!response.ok) throw new Error(`Không tải được STL mẫu: ${response.status}`);
-      bytes = await response.arrayBuffer();
+import type { BowlParams } from "./types";
+
+// Entirely procedural solids. The supplied STL is only a dimensional reference.
+export async function referenceSolid(name: "top" | "base", scale: number, height: number, params: BowlParams): Promise<Manifold> {
+  const { CrossSection, Manifold } = getEngine();
+  const wall = Math.max(1.6, params.wallThickness);
+  const bottom = Math.max(1.6, params.bottomThickness);
+  const bodyR = params.bodyDiameter / 2;
+  const mouthR = Math.max(params.insertLipDiameter / 2 + wall + 1, bodyR - params.mouthShrink);
+  const footHole = bodyR * 0.772;
+  const seatInner = params.insertMouthDiameter / 2 + 0.7 + params.insertClearance;
+  const lipH = Math.max(2.4, bottom);
+  const fillet = Math.min(params.rimRadius, wall, (mouthR - seatInner) / 3);
+  const trayR = params.trayDiameter / 2;
+  const rimZ = params.trayHeight * 36.8 / 60;
+  const lift = rimZ + 6 * scale + params.fitClearance;
+  const peak = Math.max(lift + 4, rimZ + params.islandHeight);
+  const supportR = Math.min(footHole + 3 * scale, trayR - wall - 4);
+  const floorZ = Math.max(bottom + 1, rimZ - (params.moatEnabled ? params.moatDepth : 0));
+  const profile: Array<[number, number]> = name === "base" ? [
+    [0,peak], [Math.min(53.4*scale,footHole-4),peak],
+    [footHole-params.fitClearance,lift+lipH], [footHole-params.fitClearance,lift],
+    [supportR,lift], [supportR,rimZ],
+    [trayR-fillet,rimZ], [trayR,rimZ-fillet], [trayR,fillet],
+    [trayR-fillet,0], [trayR-wall,0], [trayR-wall,floorZ-bottom], [0,floorZ-bottom],
+  ] : [
+    [footHole,0], [bodyR-fillet,0], [bodyR,fillet],
+    [mouthR,height-fillet], [mouthR-fillet,height],
+    [seatInner,height], [seatInner,height-lipH], [mouthR-wall,height-lipH],
+    [bodyR-wall,lipH], [footHole,lipH],
+  ];
+  const area = profile.reduce((sum, p, i) => { const q = profile[(i+1)%profile.length]; return sum + p[0]*q[1]-q[0]*p[1]; },0);
+  const section = new CrossSection([area < 0 ? profile.reverse() : profile]);
+  let solid = section.revolve(192);
+  section.delete();
+  if (name === "base" && params.moatEnabled) {
+    const inner = supportR + params.moatGap;
+    const outer = Math.min(inner + params.moatWidth, trayR-wall-0.5);
+    if (outer > inner + 1) {
+      const outside = Manifold.cylinder(params.moatDepth+1,outer,outer,192).translate(0,0,rimZ-params.moatDepth);
+      const inside = Manifold.cylinder(params.moatDepth+2,inner,inner,192).translate(0,0,rimZ-params.moatDepth-0.5);
+      const channel = outside.subtract(inside);
+      const cut = solid.subtract(channel);
+      solid.delete(); outside.delete(); inside.delete(); channel.delete(); solid = cut;
     }
-    const header = new Uint32Array(bytes, 0, 2);
-    return { positions: new Float32Array(bytes, 8, header[0]), indices: new Uint32Array(bytes, 8 + header[0] * 4, header[1]) };
-  })());
-  try { return await cache.get(name)!; } catch (error) { cache.delete(name); throw error; }
-}
-
-/** The original mating foot and water tray stay intact; only the upper shell rises. */
-export async function referenceSolid(name: "top" | "base", scale: number, height: number): Promise<Manifold> {
-  const source = await load(name);
-  const positions = source.positions.slice();
-  const referenceHeight = name === "top" ? 102.85713958740234 : 60;
-  for (let i = 0; i < positions.length; i += 3) {
-    const z = positions[i + 2];
-    positions[i] *= scale;
-    positions[i + 1] *= scale;
-
-    positions[i + 2] = z * height / referenceHeight;
   }
-  const { Manifold, Mesh } = getEngine();
-  const solid = new Manifold(new Mesh({numProp: 3, vertProperties: positions, triVerts: source.indices}));
-  if (solid.status() !== "NoError") { solid.delete(); throw new Error("STL mẫu không kín sau khi chỉnh kích thước"); }
+  if (name === "base" && params.baseTexture !== "smooth") {
+    const cuts: Manifold[] = [];
+    const n = Math.max(12, Math.min(96, Math.round(params.ribCount)));
+    const cs = new CrossSection([[[trayR-0.55,-0.6],[trayR+1,-0.6],[trayR+1,0.6],[trayR-0.55,0.6]]]);
+    const groove = cs.extrude(Math.max(1,rimZ-2), params.baseTexture === "twist" ? 18 : 1, params.baseTexture === "twist" ? 12 : 0).translate(0,0,1);
+    cs.delete();
+    for(let i=0;i<n;i++) cuts.push(groove.rotate(0,0,i*360/n));
+    const cutter = Manifold.union(cuts);
+    const textured = solid.subtract(cutter);
+    solid.delete(); groove.delete(); cutter.delete(); cuts.forEach(c=>c.delete()); solid = textured;
+  }
+  if (solid.status() !== "NoError" || solid.volume() <= 0) {
+    solid.delete(); throw new Error("Không dựng được khối tròn kín");
+  }
   return solid;
 }
 
-export function tiltReference(solid: Manifold, scale: number, height: number, lift: number, tilt: number): Manifold {
+/** Keep the mating foot fixed; tilt the upper rim about its center. */
+export function tiltReference(solid: Manifold, height: number, lift: number, tilt: number): Manifold {
   const refined = solid.refineToLength(4);
   const result = refined.warp((v) => {
     const z = (v[2] - lift) * 102.85713958740234 / height;
-    const t = Math.max(0, Math.min(1, (z - 38) / (100.25 - 38)));
+    const t = Math.max(0, Math.min(1, (z - 38) / (100.1 - 38)));
     const blend = t * t * (3 - 2 * t);
-    v[2] += blend * (95 * scale + v[1]) * Math.tan(tilt * Math.PI / 180);
+    v[2] += blend * v[1] * Math.tan(tilt * Math.PI / 180);
   });
-  refined.delete();
-  solid.delete();
+  refined.delete(); solid.delete();
   return result;
 }

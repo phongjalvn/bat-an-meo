@@ -47,28 +47,28 @@ export function resolvedDims(params: BowlParams) {
   const innerLow = footR + slope * (flangeH + 0.5) - wall;
   const flangeR = clamp((130.4 / 2) * scale, 8, Math.max(10, Math.min(innerLow - 1, footR - wall - 1.2)));
   // Low (front) outer edge sits at the reference height. The center and the back rise with the tilt.
-  const zCut = bodyH + topR * tanTilt;
+  const zCut = bodyH + (params.referenceShape ? 0 : topR * tanTilt);
   const sBack = tanTilt;
   const zBack = (zCut + sBack * footR) / Math.max(0.25, 1 - slope * sBack);
   const trayR = clamp(params.trayDiameter, 110, 460) / 2;
   const trayH = clamp(params.trayHeight, 16, 130);
   const deckZ = clamp(params.islandHeight, 8, Math.max(10, trayH - 8));
-  const deckLift = deckZ + 0.2;
+  const deckLift = params.referenceShape ? trayH * 36.8 / 60 + 6 * scale + fitClearance : deckZ + 0.2;
   const wallInner = trayR - wall;
   const floorT = clamp(bottom, 2, 6);
   const moatGap = clamp(params.moatGap, 0.6, 24);
-  const moatInner = footR + fitClearance + moatGap;
+  const moatInner = params.referenceShape ? params.bodyDiameter / 2 * 0.772 + 3 * scale + moatGap : footR + fitClearance + moatGap;
   const moatLimit = wallInner - 0.85;
   const moatOuter = Math.min(moatInner + clamp(params.moatWidth, 3, 24), moatLimit);
   const moatDepth = clamp(params.moatDepth, 4, Math.max(4, deckZ - floorT - 1));
-  const moatOk = params.moatEnabled && moatOuter > moatInner + 1.4 && moatInner > footR + 0.4 && moatInner < moatLimit - 1;
+  const moatOk = params.moatEnabled && moatOuter > moatInner + 1.4 && (params.referenceShape || moatInner > footR + 0.4) && moatInner < moatLimit - 1;
   const moatWidth = moatOk ? moatOuter - moatInner : 0;
   const winScale = bodyH / 102.9;
   const winZ0 = 20 * winScale;
   const winZ1 = 36 * winScale;
   const winHalfAng = (40.3 * Math.PI) / 180;
   const frontTop = bodyH - Math.max(rim, 1) - 8;
-  const wrapLocal = clamp(winZ1 + Math.max(0, frontTop - winZ1) * 0.58, winZ1 + 10, Math.max(winZ1 + 12, frontTop - 4));
+  const wrapLocal = params.referenceShape ? bodyH * 0.42 : clamp(winZ1 + Math.max(0, frontTop - winZ1) * 0.58, winZ1 + 10, Math.max(winZ1 + 12, frontTop - 4));
   const wrapR = footR + slope * wrapLocal;
   const pegR = footR;
   const socketR = footR + fitClearance;
@@ -164,7 +164,7 @@ function meshOf(solid: Manifold): MeshArrays {
     const x = props[i * stride];
     const y = props[i * stride + 1];
     const z = props[i * stride + 2];
-    const key = `${Math.round(x * 500)},${Math.round(y * 500)},${Math.round(z * 500)}`;
+    const key = `${Math.round(x * 1000000)},${Math.round(y * 1000000)},${Math.round(z * 1000000)}`;
     let id = weld.get(key);
     if (id === undefined) {
       id = raw.length / 3;
@@ -639,8 +639,8 @@ function buildDecor(
   if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
   const depth = clamp(params.embossDepth, 0.4, 4);
   const zMid = p.deckLift + p.wrapLocal;
-  const slope = params.referenceShape ? 0.1 * (p.topR / 95) * 102.85713958740234 / p.bodyH : p.slope;
-  const radius = params.referenceShape ? 84.914 * p.topR / 95 + slope * p.wrapLocal : p.wrapR;
+  const slope = params.referenceShape ? (Math.max(p.lipR + p.wall + 1, params.bodyDiameter / 2 - params.mouthShrink) - params.bodyDiameter / 2) / p.bodyH : p.slope;
+  const radius = params.referenceShape ? params.bodyDiameter / 2 + slope * p.wrapLocal : p.wrapR;
   const engrave = params.textStyle !== "emboss";
   const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, radius, depth + 0.45, zMid, depth, slope) : null;
   const inlay = wrapPolygonsToCylinder(
@@ -691,23 +691,19 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
 
   let body: Manifold;
   if (params.referenceShape) {
-    const source = await referenceSolid("top", p.topR / 95, p.bodyH);
+    const source = await referenceSolid("top", p.scale, p.bodyH, params);
     body = source.translate(0, 0, p.deckLift);
     source.delete();
+    if (params.windowEnabled !== false) {
+      const { Manifold } = getEngine();
+      // Two finger openings under the rim, on the sides, clear of the name.
+      const hole = Manifold.cylinder(220 * p.scale, 7.5 * p.scale, 7.5 * p.scale, 64, true)
+        .scale([1.8, 1, 1]).rotate(0, 90, 0).translate(0, 0, p.deckLift + p.bodyH * 0.77);
+      const opened = body.subtract(hole);
+      body.delete(); hole.delete(); body = opened;
+    }
   } else {
     body = buildBody(p, params.windowEnabled !== false);
-  }
-  if (params.referenceShape) {
-    // The reference opening is wider than a 130 mm steel lip: bridge inward
-    // with a tilted seat, while keeping the outer shell and foot unchanged.
-    const seatInner = p.mouthOuterR + p.clearance;
-    const seat = ringCyl(p.lipH + 1, seatInner, 75.5 * p.topR / 95, -p.lipH);
-    const tilted = seat.translate(0, 0, p.bodyH);
-    seat.delete();
-    const placed = tilted.translate(0, 0, p.deckLift);
-    tilted.delete();
-    const joined = body.add(placed);
-    body.delete(); placed.delete(); body = joined;
   }
   const decor = buildDecor(params, p, font);
   if (decor.cutter) {
@@ -725,11 +721,11 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
   if (decor.inlay) text = decor.inlay;
 
   if (params.referenceShape) {
-    body = tiltReference(body, p.topR / 95, p.bodyH, p.deckLift, p.tilt);
-    if (text) text = tiltReference(text, p.topR / 95, p.bodyH, p.deckLift, p.tilt);
+    body = tiltReference(body, p.bodyH, p.deckLift, p.tilt);
+    if (text) text = tiltReference(text, p.bodyH, p.deckLift, p.tilt);
   }
 
-  const tray = params.referenceShape ? await referenceSolid("base", p.trayR / 95, p.trayH) : buildTray(params, p);
+  const tray = params.referenceShape ? await referenceSolid("base", p.scale, p.trayH, params) : buildTray(params, p);
   const insert = buildInsert(p);
 
   const capR = p.mouthInner / 2;
