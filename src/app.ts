@@ -676,6 +676,7 @@ export class App {
     try {
       this.model = await buildBowl(this.params, this.font);
       this.viewer?.setModel(this.model);
+      this.viewer?.setView(this.view, this.model);
       this.syncInfo();
     } catch (error) {
       console.error(error);

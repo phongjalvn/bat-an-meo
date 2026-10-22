@@ -26,10 +26,10 @@ export class BowlViewer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x15181e);
     this.camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
-    this.camera.position.set(220, 160, 260);
+    this.camera.position.set(250, 105, 230);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.target.set(0, 50, 0);
+    this.controls.target.set(0, 42, 0);
 
     const hemi = new THREE.HemisphereLight(0xf3efe6, 0x2a2620, 0.9);
     const key = new THREE.DirectionalLight(0xffffff, 1.35);
@@ -71,8 +71,8 @@ export class BowlViewer {
     if (view === "front") this.camera.position.set(0, h * 0.55, Math.max(w, h) * 2.2);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
     else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.2, h * 0.55, 0);
-    else this.camera.position.set(w * 1.4, h * 1.25, w * 1.7);
-    this.controls.target.set(0, h * 0.45, 0);
+    else this.camera.position.set(w * 1.35, Math.max(58, h * 0.42), w * 1.05);
+    this.controls.target.set(0, h * 0.38, 0);
     this.controls.update();
   }
 
@@ -116,7 +116,7 @@ export class BowlViewer {
     const plateScale = Math.max(1, model.width / 220);
     this.plate.scale.set(plateScale, plateScale, 1);
     this.drawDimensions(model);
-    this.controls.target.set(0, model.height * 0.42, 0);
+    this.controls.target.set(0, model.height * 0.38, 0);
   }
 
   private drawDimensions(model: BowlModel) {

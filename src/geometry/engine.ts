@@ -41,19 +41,19 @@ export function resolvedDims(params: BowlParams) {
   const pocketBaseR = baseR + clearance;
   const pocketLipR = lipR + clearance;
   const lipZ = insertHeight + lipT;
-  const tiltSin = Math.sin(tiltRad);
-  const tiltCos = Math.max(0.72, Math.cos(tiltRad));
   const extraBot = rx * Math.tan(tiltRad) + 10;
   const extraTop = rx * Math.tan(tiltRad) + 6;
-  const maxStem = (bodyH - bottom - pocketLipR * tiltSin) / tiltCos;
-  const extraDepth = Math.max(0.8, maxStem - lipZ);
+  // Only a little extra cavity — a deep pocket would open into the centering socket.
+  const extraDepth = 0.8;
   const floorT = Math.max(1.8, Math.min(3.2, bottom));
   const moatWidth = clamp(params.moatWidth, 8, 40);
   const moatDepth = clamp(params.moatDepth, 6, 22);
   const moatGap = clamp(params.moatGap, 1, 24);
-  const pegR = clamp(rx * 0.69, 18, rx - wall - 6);
+  const pegR = clamp(rx * 0.69, 18, rx - wall - 8);
   const socketR = pegR + fitClearance;
-  const islandR = clamp(rx - 8, pegR + wall + 2, rx - 2);
+  const islandR = clamp(rx * 0.81, pegR + wall + 4, rx - 4);
+  const maxPeg = bodyH - lipZ - extraDepth - bottom - 2;
+  const pegH = clamp(Math.min(bodyH * 0.32, maxPeg), 12, 32);
   const moatInner = islandR + moatGap;
   const moatOuter = params.moatEnabled ? moatInner + moatWidth : moatInner;
   const minTrayR = minTrayDiameter({
@@ -66,7 +66,6 @@ export function resolvedDims(params: BowlParams) {
   const trayR = Math.max(clamp(params.trayDiameter, 110, 420) / 2, minTrayR, moatOuter + wall);
   const trayH = Math.max(clamp(params.trayHeight, 10, 60), floorT + (params.moatEnabled ? moatDepth : 0) + 2.4);
   const islandH = Math.max(clamp(params.islandHeight, 10, 80), floorT + (params.moatEnabled ? moatDepth : 0) + 2.2);
-  const pegH = clamp(bodyH * 0.4, 16, 36);
   const zShoulder = islandH;
   const zFootTop = islandH;
   const zRimCenter = zFootTop + bodyH;
@@ -275,44 +274,71 @@ function buildInsert(p: Dims): Manifold {
   return applyTiltAndSeat(atTop, p);
 }
 
+function ringCyl(height: number, innerR: number, outerR: number, z0: number): Manifold {
+  const { Manifold } = getEngine();
+  const outer = Manifold.cylinder(height, outerR, outerR, 80).translate(0, 0, z0);
+  const inner = Manifold.cylinder(height + 1, innerR, innerR, 80).translate(0, 0, z0 - 0.4);
+  const ring = outer.subtract(inner);
+  outer.delete();
+  inner.delete();
+  return ring;
+}
+
 function buildTray(params: BowlParams, p: Dims): Manifold {
-  const { CrossSection } = getEngine();
-  const innerWall = Math.max(p.islandR + 2, p.trayR - p.wall);
-  const waterTop = p.floorT + p.moatDepth;
-  const profile: Array<[number, number]> = [[0, 0]];
-  if (params.antiSlipGroove) {
-    profile.push([p.trayR - 5.6, 0]);
-    profile.push([p.trayR - 5.6, 1.25]);
-    profile.push([p.trayR - 2.3, 1.25]);
-    profile.push([p.trayR - 2.3, 0]);
+  const { Manifold, CrossSection } = getEngine();
+  const innerWall = Math.max(p.islandR + 2.5, p.trayR - p.wall);
+  const waterTop = p.floorT + (params.moatEnabled ? p.moatDepth : 0);
+  const dishTop = Math.max(p.trayH, waterTop + 2.2);
+  let tray = Manifold.cylinder(dishTop, p.trayR, p.trayR, 80);
+
+  if (p.islandH > dishTop + 0.2) {
+    const cap = Manifold.cylinder(p.islandH - dishTop, p.islandR, p.islandR, 72).translate(0, 0, dishTop);
+    const withCap = tray.add(cap);
+    tray.delete();
+    cap.delete();
+    tray = withCap;
   }
-  profile.push([p.trayR, 0]);
-  profile.push([p.trayR, p.trayH]);
-  profile.push([innerWall, p.trayH]);
+
+  const cavH = Math.max(2, dishTop - waterTop + 1.2);
+  const cavity = ringCyl(cavH, p.islandR, innerWall, waterTop);
+  const hollow = tray.subtract(cavity);
+  tray.delete();
+  cavity.delete();
+  tray = hollow;
+
   if (params.moatEnabled && p.moatOuter > p.moatInner + 0.8) {
-    profile.push([innerWall, waterTop]);
-    profile.push([p.moatOuter, waterTop]);
-    profile.push([p.moatOuter, p.floorT]);
-    profile.push([p.moatInner, p.floorT]);
-    profile.push([p.moatInner, waterTop]);
-    profile.push([p.islandR, waterTop]);
-  } else {
-    profile.push([innerWall, p.floorT]);
-    profile.push([p.islandR, p.floorT]);
+    const channel = ringCyl(p.moatDepth + 0.15, p.moatInner, p.moatOuter, p.floorT);
+    const cut = tray.subtract(channel);
+    tray.delete();
+    channel.delete();
+    tray = cut;
   }
-  profile.push([p.islandR, p.islandH]);
-  profile.push([p.pegR, p.islandH]);
-  profile.push([p.pegR, p.islandH + p.pegH]);
-  profile.push([0, p.islandH + p.pegH]);
-  let tray = revolve(closeProfile(profile), 80);
+
+  const peg = Manifold.cylinder(p.pegH, p.pegR, p.pegR, 64).translate(0, 0, p.islandH);
+  const withPeg = tray.add(peg);
+  tray.delete();
+  peg.delete();
+  tray = withPeg;
+
+  if (params.antiSlipGroove) {
+    const groove = ringCyl(1.4, Math.max(8, p.trayR - 6.2), p.trayR - 2.1, -0.15);
+    const grooved = tray.subtract(groove);
+    tray.delete();
+    groove.delete();
+    tray = grooved;
+  }
 
   if (params.baseTexture !== "smooth") {
-    const ring = toothedRing(p.trayR + 1.1, p.trayR + 0.08, params.ribCount);
-    const cs = new CrossSection([ring]);
+    const ring = toothedRing(p.trayR + 1.15, p.trayR + 0.12, params.ribCount);
+    const teeth = new CrossSection([ring]);
+    const hole = CrossSection.circle(p.trayR + 0.06, 80);
+    const band = teeth.subtract(hole);
+    teeth.delete();
+    hole.delete();
     const twist = params.baseTexture === "twist" ? 22 : 0;
     const divisions = params.baseTexture === "twist" ? 10 : 0;
-    const ribs = cs.extrude(Math.max(6, p.trayH - 1), divisions, twist);
-    cs.delete();
+    const ribs = band.extrude(Math.max(6, p.trayH - 1), divisions, twist);
+    band.delete();
     const combined = tray.add(ribs);
     tray.delete();
     ribs.delete();
@@ -329,7 +355,7 @@ function buildDecor(
   const layout = layoutDecorations(font, params.text, params.textLine2, params.fontSize, params.icons);
   if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
   const depth = clamp(params.embossDepth, 0.4, 4);
-  const zMid = p.bodyH * 0.42;
+  const zMid = Math.max(p.bodyH * 0.55, p.pegH + 14);
   const engrave = params.textStyle !== "emboss";
   const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, p.rx, depth + 0.45, zMid, 0.12) : null;
   const inlay = wrapPolygonsToCylinder(layout.polygons, p.rx, depth + (engrave ? 0.05 : 0.15), zMid, engrave ? 0.02 : 0.35);

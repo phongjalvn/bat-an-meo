@@ -114,17 +114,17 @@ export const PARAM_LIMITS = {
 
 export const DEFAULT_PARAMS: BowlParams = {
   bodyDiameter: 150,
-  height: 60,
+  height: 79,
   innerDepth: 40,
   wallThickness: 3,
   bottomThickness: 3,
   mouthShrink: 0,
-  trayDiameter: 210,
+  trayDiameter: 250,
   trayHeight: 20,
   islandHeight: 22,
   rimRadius: 3.5,
-  tiltDeg: 0,
-  moatEnabled: false,
+  tiltDeg: 15,
+  moatEnabled: true,
   moatWidth: 16,
   moatDepth: 10,
   moatGap: 6,
@@ -138,7 +138,7 @@ export const DEFAULT_PARAMS: BowlParams = {
   insertLipThickness: 1.4,
   antiSlipGroove: true,
   text: "Bé Mèo",
-  textLine2: "",
+  textLine2: "30/04/2026",
   fontSize: 17,
   embossDepth: 1,
   textStyle: "engrave",
@@ -250,7 +250,10 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
   const lipZ = next.insertHeight + next.insertLipThickness;
   const lipR = next.insertLipDiameter / 2 + next.insertClearance;
-  const minH = Math.ceil((lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + lipR * Math.sin(tiltRad) + 8);
+  const pegReserve = 16;
+  const minH = Math.ceil(
+    (lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + pegReserve + lipR * Math.sin(tiltRad) + 2,
+  );
   next.height = Math.max(next.height, minH);
   next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
   return next;

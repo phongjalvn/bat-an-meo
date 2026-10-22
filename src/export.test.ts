@@ -43,7 +43,8 @@ describe("default pet bowl export", () => {
     expect(stl.byteLength).toBeGreaterThan(84 + 50);
     const triCount = new DataView(stl.buffer, stl.byteOffset, stl.byteLength).getUint32(80, true);
     expect(triCount).toBeGreaterThan(100);
-    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h60_w3p0_i130(_Bé-Mèo)?/);
+    expect(model.parts.some((p) => p.name === "text")).toBe(true);
+    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h79_w3p0_i130(_Bé-Mèo)?/);
   });
 
   it("exports Bambu Lab and Snapmaker U1 3MF projects with part-to-filament mapping", async () => {
@@ -63,18 +64,16 @@ describe("default pet bowl export", () => {
       minObjects: 2,
     });
 
-    expect(bambu.parts.map((p) => [p.name, p.extruder])).toEqual(
-      expect.arrayContaining([
-        ["body", 1],
-        ["base", 2],
-      ]),
-    );
-    expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual(
-      expect.arrayContaining([
-        ["body", 1],
-        ["base", 2],
-      ]),
-    );
+    expect(bambu.parts.map((p) => [p.name, p.extruder])).toEqual([
+      ["body", 1],
+      ["base", 2],
+      ["text", 3],
+    ]);
+    expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual([
+      ["body", 1],
+      ["base", 2],
+      ["text", 3],
+    ]);
     expect(bambu.parts.map((p) => p.name)).not.toContain("moat");
     expect(bambu.filamentColours[0]).toBe("#F7F1E3");
     expect(bambu.filamentColours[1]).toBe("#C4A574");
@@ -168,6 +167,7 @@ describe("stainless insert sizes", () => {
     expect(p.extraDepth).toBeGreaterThanOrEqual(0.8);
     expect(frontZ).toBeGreaterThanOrEqual(p.zFootTop + p.bottom - 0.6);
     expect(p.bottom).toBeGreaterThanOrEqual(1.6);
+    expect(p.bodyH - p.lipZ - p.extraDepth).toBeGreaterThan(p.pegH + p.bottom - 0.8);
   });
 
   it("uses Small 11 cm on cat presets and Large 16 cm on dog presets", () => {
@@ -222,6 +222,53 @@ describe("tray moat and centering fit", () => {
     const settings = (await JSZip.loadAsync(u1.bytes)).file("Metadata/model_settings.config");
     const xml = await settings!.async("string");
     expect(xml).not.toContain('key="name" value="moat"');
+
+    const p = resolvedDims(params);
+    expect(p.islandR / p.rx).toBeGreaterThan(0.75);
+    expect(p.islandR / p.rx).toBeLessThan(0.88);
+    expect(p.pegR / p.rx).toBeGreaterThan(0.62);
+    expect(p.pegR / p.rx).toBeLessThan(0.74);
+    expect(p.moatOuter - p.moatInner).toBeCloseTo(p.moatWidth, 4);
+    expect(p.trayR).toBeGreaterThan(p.moatOuter + p.wall - 0.2);
+
+    const waterTop = p.floorT + p.moatDepth;
+    const ring = [...radiiNear(base.mesh.positions, p.floorT, 0.6), ...radiiNear(base.mesh.positions, waterTop, 0.6)];
+    expect(ring.some((r) => Math.abs(r - p.moatInner) < 2.5)).toBe(true);
+    expect(ring.some((r) => Math.abs(r - p.moatOuter) < 2.5)).toBe(true);
+  });
+
+  it("wraps name, second line, and icons on the cylinder", async () => {
+    const params = {
+      ...DEFAULT_PARAMS,
+      text: "Winnie",
+      textLine2: "30/04/2026",
+      textStyle: "engrave" as const,
+    };
+    const model = await buildBowl(params, font);
+    const text = model.parts.find((p) => p.name === "text");
+    expect(text).toBeTruthy();
+    const pos = text!.mesh.positions;
+    let rmin = Infinity;
+    let rmax = -Infinity;
+    let spanX = 0;
+    let spanY = 0;
+    for (let i = 0; i < pos.length; i += 3) {
+      const r = Math.hypot(pos[i], pos[i + 1]);
+      rmin = Math.min(rmin, r);
+      rmax = Math.max(rmax, r);
+      spanX = Math.max(spanX, Math.abs(pos[i]));
+      spanY = Math.max(spanY, Math.abs(pos[i + 1]));
+    }
+    expect(spanX).toBeGreaterThan(12);
+    expect(spanY).toBeGreaterThan(12);
+    expect(rmin).toBeGreaterThan(params.bodyDiameter / 2 - 4);
+    expect(rmax - rmin).toBeGreaterThan(0.6);
+    expect(text!.volumeMm3).toBeGreaterThan(80);
+
+    const embossed = await buildBowl({ ...params, textStyle: "emboss" }, font);
+    const bodyEngrave = model.parts.find((p) => p.name === "body")!.volumeMm3;
+    const bodyEmboss = embossed.parts.find((p) => p.name === "body")!.volumeMm3;
+    expect(bodyEmboss).toBeGreaterThan(bodyEngrave + 20);
   });
 });
 
@@ -235,6 +282,14 @@ describe("icon outlines", () => {
     expect(isClosedPrintable(open)).toBe(false);
   });
 });
+
+function radiiNear(positions: Float32Array, z: number, tol: number) {
+  const rs: number[] = [];
+  for (let i = 0; i < positions.length; i += 3) {
+    if (Math.abs(positions[i + 2] - z) <= tol) rs.push(Math.hypot(positions[i], positions[i + 1]));
+  }
+  return rs;
+}
 
 function extrema(positions: Float32Array, axis: 0 | 1 | 2) {
   let min = Infinity;

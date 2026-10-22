@@ -84,7 +84,7 @@ export const PRESETS: Preset[] = [
       {
         ...DEFAULT_PARAMS,
         height: 76,
-        trayDiameter: 230,
+        trayDiameter: 250,
         trayHeight: 20,
         islandHeight: 24,
         tiltDeg: 15,
@@ -93,7 +93,7 @@ export const PRESETS: Preset[] = [
         moatDepth: 10,
         moatGap: 6,
         text: "Bé Mèo",
-        textLine2: "",
+        textLine2: "30/04/2026",
         fontSize: 16,
         textStyle: "engrave",
         icons: defaultIcons(),
