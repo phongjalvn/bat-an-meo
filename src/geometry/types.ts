@@ -4,6 +4,12 @@ export type Locale = "vi" | "en";
 
 export type InsertSizeId = "small" | "large" | "custom";
 
+export type TextStyle = "engrave" | "emboss";
+
+export type IconKind = "paw" | "cat" | "dog" | "heart" | "fish" | "bone" | "star" | "custom";
+
+export type IconAnchor = "left" | "right" | "above";
+
 export interface InsertPreset {
   id: Exclude<InsertSizeId, "custom">;
   lipMm: number;
@@ -18,6 +24,33 @@ export const INSERT_PRESETS: Record<Exclude<InsertSizeId, "custom">, InsertPrese
   large: { id: "large", lipMm: 190, mouthMm: 160, baseMm: 95, heightMm: 55, lipThicknessMm: 1.6 },
 };
 
+export interface IconSlot {
+  id: string;
+  enabled: boolean;
+  kind: IconKind;
+  anchor: IconAnchor;
+  sizeMm: number;
+  rotationDeg: number;
+  customName?: string;
+  customPolygons?: Array<Array<[number, number]>>;
+  featureWarning?: boolean;
+}
+
+export function defaultIcons(): IconSlot[] {
+  return [
+    { id: "icon-1", enabled: true, kind: "paw", anchor: "left", sizeMm: 11, rotationDeg: 0 },
+    { id: "icon-2", enabled: false, kind: "heart", anchor: "right", sizeMm: 11, rotationDeg: 0 },
+  ];
+}
+
+export function cloneIcons(icons: IconSlot[] | undefined): IconSlot[] {
+  if (!icons?.length) return defaultIcons();
+  return icons.map((icon) => ({
+    ...icon,
+    customPolygons: icon.customPolygons?.map((poly) => poly.map(([x, y]) => [x, y] as [number, number])),
+  }));
+}
+
 export interface BowlParams {
   bodyDiameter: number;
   height: number;
@@ -25,14 +58,16 @@ export interface BowlParams {
   wallThickness: number;
   bottomThickness: number;
   mouthShrink: number;
-  footHeight: number;
+  trayDiameter: number;
+  trayHeight: number;
+  islandHeight: number;
   rimRadius: number;
   tiltDeg: number;
-  standHeight: number;
   moatEnabled: boolean;
   moatWidth: number;
   moatDepth: number;
-  moatDistance: number;
+  moatGap: number;
+  fitClearance: number;
   insertSize: InsertSizeId;
   insertLipDiameter: number;
   insertMouthDiameter: number;
@@ -40,11 +75,13 @@ export interface BowlParams {
   insertHeight: number;
   insertClearance: number;
   insertLipThickness: number;
-  doubleBowl: boolean;
   antiSlipGroove: boolean;
   text: string;
+  textLine2: string;
   fontSize: number;
   embossDepth: number;
+  textStyle: TextStyle;
+  icons: IconSlot[];
   baseTexture: BaseTexture;
   ribCount: number;
 }
@@ -56,13 +93,15 @@ export const PARAM_LIMITS = {
   wallThickness: { min: 1.6, max: 8, step: 0.1 },
   bottomThickness: { min: 1.6, max: 10, step: 0.1 },
   mouthShrink: { min: 0, max: 20, step: 0.5 },
-  footHeight: { min: 6, max: 60, step: 1 },
+  trayDiameter: { min: 110, max: 420, step: 1 },
+  trayHeight: { min: 10, max: 60, step: 0.5 },
+  islandHeight: { min: 10, max: 80, step: 0.5 },
   rimRadius: { min: 0, max: 10, step: 0.1 },
   tiltDeg: { min: 0, max: 15, step: 0.5 },
-  standHeight: { min: 0, max: 120, step: 1 },
   moatWidth: { min: 8, max: 40, step: 0.5 },
   moatDepth: { min: 6, max: 22, step: 0.5 },
-  moatDistance: { min: 2, max: 24, step: 0.5 },
+  moatGap: { min: 1, max: 24, step: 0.5 },
+  fitClearance: { min: 0.2, max: 1.2, step: 0.05 },
   insertLipDiameter: { min: 90, max: 240, step: 0.5 },
   insertMouthDiameter: { min: 60, max: 220, step: 0.5 },
   insertBaseDiameter: { min: 40, max: 180, step: 0.5 },
@@ -80,14 +119,16 @@ export const DEFAULT_PARAMS: BowlParams = {
   wallThickness: 3,
   bottomThickness: 3,
   mouthShrink: 0,
-  footHeight: 25,
+  trayDiameter: 210,
+  trayHeight: 20,
+  islandHeight: 22,
   rimRadius: 3.5,
   tiltDeg: 0,
-  standHeight: 0,
   moatEnabled: false,
   moatWidth: 16,
   moatDepth: 10,
-  moatDistance: 6,
+  moatGap: 6,
+  fitClearance: 0.45,
   insertSize: "small",
   insertLipDiameter: 130,
   insertMouthDiameter: 110,
@@ -95,11 +136,13 @@ export const DEFAULT_PARAMS: BowlParams = {
   insertHeight: 40,
   insertClearance: 0.4,
   insertLipThickness: 1.4,
-  doubleBowl: false,
   antiSlipGroove: true,
   text: "Bé Mèo",
+  textLine2: "",
   fontSize: 17,
   embossDepth: 1,
+  textStyle: "engrave",
+  icons: defaultIcons(),
   baseTexture: "ribs",
   ribCount: 64,
 };
@@ -107,22 +150,15 @@ export const DEFAULT_PARAMS: BowlParams = {
 export const PART_COLORS = {
   body: "#F7F1E3",
   base: "#C4A574",
-  stand: "#C4A574",
   text: "#6B4423",
-  moat: "#4A90A4",
   insert: "#C5CCD3",
 } as const;
 
-export const FILAMENT_COLORS = [
-  PART_COLORS.body,
-  PART_COLORS.base,
-  PART_COLORS.text,
-  PART_COLORS.moat,
-];
+export const FILAMENT_COLORS = [PART_COLORS.body, PART_COLORS.base, PART_COLORS.text, "#4A90A4"];
 
 export const PLA_DENSITY = 1.24;
 
-export type PartName = "body" | "base" | "stand" | "text" | "moat";
+export type PartName = "body" | "base" | "text";
 
 export interface MeshArrays {
   positions: Float32Array;
@@ -160,11 +196,18 @@ export interface BowlModel {
   moatEnabled: boolean;
   moatWidth: number;
   moatDepth: number;
-  moatDistance: number;
+  moatGap: number;
+  trayDiameter: number;
+  trayHeight: number;
+  islandHeight: number;
+  pegRadius: number;
+  socketRadius: number;
+  fitClearance: number;
   insertRimMm: number;
   insertMouthMm: number;
   insertBaseMm: number;
   insertHeightMm: number;
+  iconWarnings: string[];
   stability: StabilityInfo;
 }
 
@@ -185,8 +228,15 @@ export function minHolderDiameter(
   return params.insertLipDiameter + 2 * params.wallThickness + 2 * params.insertClearance;
 }
 
+export function minTrayDiameter(
+  params: Pick<BowlParams, "bodyDiameter" | "wallThickness" | "moatEnabled" | "moatWidth" | "moatGap">,
+): number {
+  const water = params.moatEnabled ? params.moatWidth : 4;
+  return params.bodyDiameter + 2 * (params.moatGap + water + params.wallThickness);
+}
+
 export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlParams {
-  const next = { ...params, insertSize: size };
+  const next: BowlParams = { ...params, insertSize: size, icons: cloneIcons(params.icons) };
   if (size !== "custom") {
     const preset = INSERT_PRESETS[size];
     next.insertLipDiameter = preset.lipMm;
@@ -200,20 +250,28 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
   const lipZ = next.insertHeight + next.insertLipThickness;
   const lipR = next.insertLipDiameter / 2 + next.insertClearance;
-  const minH = Math.ceil((lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + lipR * Math.sin(tiltRad) + 2);
+  const minH = Math.ceil((lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + lipR * Math.sin(tiltRad) + 8);
   next.height = Math.max(next.height, minH);
+  next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
   return next;
 }
 
-type LegacyInsert = Omit<Partial<BowlParams>, "insertSize"> & {
+type LegacyInsert = Omit<Partial<BowlParams>, "insertSize" | "icons"> & {
   insertSize?: string;
   insertDiameter?: number;
   insertDepth?: number;
   insertLipWidth?: number;
+  doubleBowl?: boolean;
+  moatDistance?: number;
+  standHeight?: number;
+  footHeight?: number;
+  icons?: IconSlot[];
 };
 
 export function normalizeParams(raw: LegacyInsert | undefined): BowlParams {
   const incoming: LegacyInsert = { ...raw };
+  // Saved projects may still carry a double-bowl flag; single-bowl only.
+  delete incoming.doubleBowl;
   if (incoming.insertSize === "14" || incoming.insertSize === "11") incoming.insertSize = "small";
   if (incoming.insertSize === "16") incoming.insertSize = "large";
   if (incoming.insertLipDiameter == null && incoming.insertDiameter != null) {
@@ -223,14 +281,60 @@ export function normalizeParams(raw: LegacyInsert | undefined): BowlParams {
     incoming.insertMouthDiameter = incoming.insertMouthDiameter ?? incoming.insertDiameter - 2 * lipW;
     incoming.insertBaseDiameter = incoming.insertBaseDiameter ?? (incoming.insertMouthDiameter ?? 110) * 0.64;
   }
-  const merged = { ...DEFAULT_PARAMS, ...incoming };
-  const size: InsertSizeId = merged.insertSize === "small" || merged.insertSize === "large" ? merged.insertSize : "custom";
-  return applyInsertSize({ ...merged, insertSize: size }, size);
+  if (incoming.moatGap == null && incoming.moatDistance != null) incoming.moatGap = incoming.moatDistance;
+  if (incoming.trayHeight == null && incoming.footHeight != null) {
+    incoming.trayHeight = Math.min(PARAM_LIMITS.trayHeight.max, Math.max(PARAM_LIMITS.trayHeight.min, incoming.footHeight));
+  }
+  if (incoming.islandHeight == null && incoming.standHeight != null) {
+    incoming.islandHeight = Math.min(
+      PARAM_LIMITS.islandHeight.max,
+      Math.max(PARAM_LIMITS.islandHeight.min, incoming.standHeight > 0 ? incoming.standHeight : DEFAULT_PARAMS.islandHeight),
+    );
+  }
+  const size: InsertSizeId =
+    incoming.insertSize === "small" || incoming.insertSize === "large" || incoming.insertSize === "custom"
+      ? incoming.insertSize
+      : DEFAULT_PARAMS.insertSize;
+  const merged: BowlParams = {
+    ...DEFAULT_PARAMS,
+    bodyDiameter: incoming.bodyDiameter ?? DEFAULT_PARAMS.bodyDiameter,
+    height: incoming.height ?? DEFAULT_PARAMS.height,
+    innerDepth: incoming.innerDepth ?? DEFAULT_PARAMS.innerDepth,
+    wallThickness: incoming.wallThickness ?? DEFAULT_PARAMS.wallThickness,
+    bottomThickness: incoming.bottomThickness ?? DEFAULT_PARAMS.bottomThickness,
+    mouthShrink: incoming.mouthShrink ?? DEFAULT_PARAMS.mouthShrink,
+    trayDiameter: incoming.trayDiameter ?? DEFAULT_PARAMS.trayDiameter,
+    trayHeight: incoming.trayHeight ?? DEFAULT_PARAMS.trayHeight,
+    islandHeight: incoming.islandHeight ?? DEFAULT_PARAMS.islandHeight,
+    rimRadius: incoming.rimRadius ?? DEFAULT_PARAMS.rimRadius,
+    tiltDeg: incoming.tiltDeg ?? DEFAULT_PARAMS.tiltDeg,
+    moatEnabled: incoming.moatEnabled ?? DEFAULT_PARAMS.moatEnabled,
+    moatWidth: incoming.moatWidth ?? DEFAULT_PARAMS.moatWidth,
+    moatDepth: incoming.moatDepth ?? DEFAULT_PARAMS.moatDepth,
+    moatGap: incoming.moatGap ?? DEFAULT_PARAMS.moatGap,
+    fitClearance: incoming.fitClearance ?? DEFAULT_PARAMS.fitClearance,
+    insertSize: size,
+    insertLipDiameter: incoming.insertLipDiameter ?? DEFAULT_PARAMS.insertLipDiameter,
+    insertMouthDiameter: incoming.insertMouthDiameter ?? DEFAULT_PARAMS.insertMouthDiameter,
+    insertBaseDiameter: incoming.insertBaseDiameter ?? DEFAULT_PARAMS.insertBaseDiameter,
+    insertHeight: incoming.insertHeight ?? DEFAULT_PARAMS.insertHeight,
+    insertClearance: incoming.insertClearance ?? DEFAULT_PARAMS.insertClearance,
+    insertLipThickness: incoming.insertLipThickness ?? DEFAULT_PARAMS.insertLipThickness,
+    antiSlipGroove: incoming.antiSlipGroove ?? DEFAULT_PARAMS.antiSlipGroove,
+    text: incoming.text ?? DEFAULT_PARAMS.text,
+    textLine2: incoming.textLine2 ?? "",
+    fontSize: incoming.fontSize ?? DEFAULT_PARAMS.fontSize,
+    embossDepth: incoming.embossDepth ?? DEFAULT_PARAMS.embossDepth,
+    textStyle: incoming.textStyle === "emboss" ? "emboss" : incoming.textStyle === "engrave" ? "engrave" : DEFAULT_PARAMS.textStyle,
+    icons: cloneIcons(incoming.icons ?? DEFAULT_PARAMS.icons),
+    baseTexture: incoming.baseTexture ?? DEFAULT_PARAMS.baseTexture,
+    ribCount: incoming.ribCount ?? DEFAULT_PARAMS.ribCount,
+  };
+  return applyInsertSize(merged, size);
 }
 
 export function extruderOf(name: PartName): number {
   if (name === "body") return 1;
-  if (name === "base" || name === "stand") return 2;
-  if (name === "text") return 3;
-  return 4;
+  if (name === "base") return 2;
+  return 3;
 }

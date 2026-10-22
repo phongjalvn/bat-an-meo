@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import JSZip from "jszip";
 import { parse } from "opentype.js";
-import { DEFAULT_PARAMS, applyInsertSize, minHolderDiameter } from "./geometry/types";
+import { DEFAULT_PARAMS, applyInsertSize, minHolderDiameter, minTrayDiameter, normalizeParams } from "./geometry/types";
 import { buildBowl, initEngine, resolvedDims } from "./geometry/engine";
 import { isPrintableManifold } from "./geometry/manifold-check";
+import { isClosedPrintable, pathToPolygons, svgTextToPolygons } from "./geometry/icons";
 import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { REQUIRED_3MF_FILES, buildThreeMf } from "./export/threemf";
 import { PRESETS } from "./presets";
@@ -30,7 +31,9 @@ describe("default pet bowl export", () => {
     expect(model.insertBaseMm).toBe(70);
     expect(model.insertHeightMm).toBe(40);
     expect(model.insert?.positions.length).toBeGreaterThan(300);
-    expect(model.parts.some((p) => p.name === "moat")).toBe(false);
+    expect(model.parts.map((p) => p.name as string)).not.toContain("moat");
+    expect(model.parts.map((p) => p.name as string)).not.toContain("stand");
+    expect(Math.abs(model.width - model.depth)).toBeLessThan(8);
 
     for (const part of model.parts) {
       expect(isPrintableManifold(part.mesh)).toBe(true);
@@ -52,28 +55,56 @@ describe("default pet bowl export", () => {
     await assertThreeMf(bambu.bytes, {
       printer: "Bambu Lab P1S",
       filamentMaps: "1 1 1 1",
-      minObjects: 3,
+      minObjects: 2,
     });
     await assertThreeMf(u1.bytes, {
       printer: "Snapmaker U1",
       filamentMaps: "1 2 3 4",
-      minObjects: 3,
+      minObjects: 2,
     });
 
-    expect(bambu.parts.map((p) => [p.name, p.extruder])).toEqual([
-      ["body", 1],
-      ["base", 2],
-      ["text", 3],
-    ]);
-    expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual([
-      ["body", 1],
-      ["base", 2],
-      ["text", 3],
-    ]);
+    expect(bambu.parts.map((p) => [p.name, p.extruder])).toEqual(
+      expect.arrayContaining([
+        ["body", 1],
+        ["base", 2],
+      ]),
+    );
+    expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual(
+      expect.arrayContaining([
+        ["body", 1],
+        ["base", 2],
+      ]),
+    );
+    expect(bambu.parts.map((p) => p.name)).not.toContain("moat");
     expect(bambu.filamentColours[0]).toBe("#F7F1E3");
     expect(bambu.filamentColours[1]).toBe("#C4A574");
     expect(bambu.filamentColours[2]).toBe("#6B4423");
-    expect(bambu.filamentColours[3]).toBe("#4A90A4");
+  });
+});
+
+describe("single bowl only", () => {
+  it("ignores a saved double-bowl flag and never emits a paired body", () => {
+    const loaded = normalizeParams({
+      doubleBowl: true,
+      moatDistance: 8,
+      standHeight: 40,
+      footHeight: 22,
+    });
+    expect((loaded as { doubleBowl?: boolean }).doubleBowl).toBeUndefined();
+    expect(loaded.moatGap).toBe(8);
+    expect(loaded.trayHeight).toBe(22);
+    expect(loaded.islandHeight).toBe(40);
+  });
+
+  it("builds one circular tray even when an old project asked for two bowls", async () => {
+    const params = normalizeParams({ ...DEFAULT_PARAMS, doubleBowl: true } as typeof DEFAULT_PARAMS & {
+      doubleBowl: boolean;
+    });
+    const model = await buildBowl(params, font);
+    expect(model.parts.filter((p) => p.name === "body")).toHaveLength(1);
+    expect(model.parts.filter((p) => p.name === "base")).toHaveLength(1);
+    expect(Math.abs(model.width - model.depth)).toBeLessThan(10);
+    expect(model.width).toBeGreaterThan(params.bodyDiameter);
   });
 });
 
@@ -91,6 +122,7 @@ describe("stainless insert sizes", () => {
     expect(pSmall.pocketLipR).toBeGreaterThan(pSmall.pocketMouthR);
     expect(pSmall.rx * 2).toBeGreaterThanOrEqual(minHolderDiameter(sizedSmall) - 0.01);
     expect(minHolderDiameter(sizedSmall)).toBeCloseTo(130 + 2 * sizedSmall.wallThickness + 2 * sizedSmall.insertClearance, 4);
+    expect(pSmall.trayR * 2).toBeGreaterThanOrEqual(minTrayDiameter(sizedSmall) - 0.01);
 
     const sizedLarge = applyInsertSize({ ...DEFAULT_PARAMS, bodyDiameter: 150 }, "large");
     const pLarge = resolvedDims(sizedLarge);
@@ -149,45 +181,58 @@ describe("stainless insert sizes", () => {
     expect(care.params.moatEnabled).toBe(true);
     expect(care.params.tiltDeg).toBe(15);
     expect(care.params.insertSize).toBe("small");
+    expect((cat.params as { doubleBowl?: boolean }).doubleBowl).toBeUndefined();
   });
 });
 
-describe("anti-hunch and anti-ant export", () => {
-  it("exports a watertight moat as filament 4 and keeps every part manifold", async () => {
+describe("tray moat and centering fit", () => {
+  it("cuts the water channel into the base instead of exporting a fourth filament part", async () => {
     const params = PRESETS.find((p) => p.id === "cat-care")!.params;
     const model = await buildBowl(params, font);
     expect(model.moatEnabled).toBe(true);
     expect(model.moatWaterMl).toBeGreaterThan(20);
     expect(model.tiltDeg).toBe(15);
     expect(model.stability.stable).toBe(true);
-    expect(model.parts.map((p) => p.name)).toEqual(expect.arrayContaining(["body", "base", "text", "moat"]));
+    expect(model.parts.map((p) => p.name)).toEqual(expect.arrayContaining(["body", "base"]));
+    expect(model.parts.map((p) => p.name as string)).not.toContain("moat");
+    expect(model.socketRadius).toBeCloseTo(model.pegRadius + model.fitClearance, 4);
 
     for (const part of model.parts) {
       expect(isPrintableManifold(part.mesh)).toBe(true);
       expect(part.volumeMm3).toBeGreaterThan(50);
     }
 
-    const moat = model.parts.find((p) => p.name === "moat")!;
-    const zs = extrema(moat.mesh.positions, 2);
-    expect(zs.max - zs.min).toBeGreaterThan(params.moatDepth + 1.2);
+    const base = model.parts.find((p) => p.name === "base")!;
+    const zs = extrema(base.mesh.positions, 2);
+    expect(zs.max - zs.min).toBeGreaterThan(params.moatDepth + params.trayHeight * 0.4);
 
     const u1 = await buildThreeMf(model, "snapmaker-u1");
     expect(u1.parts.map((p) => [p.name, p.extruder])).toEqual(
       expect.arrayContaining([
         ["body", 1],
         ["base", 2],
-        ["text", 3],
-        ["moat", 4],
       ]),
     );
+    expect(u1.parts.map((p) => p.name)).not.toContain("moat");
     await assertThreeMf(u1.bytes, {
       printer: "Snapmaker U1",
       filamentMaps: "1 2 3 4",
-      minObjects: 4,
+      minObjects: 2,
     });
     const settings = (await JSZip.loadAsync(u1.bytes)).file("Metadata/model_settings.config");
     const xml = await settings!.async("string");
-    expect(xml).toContain('key="extruder" value="4"');
+    expect(xml).not.toContain('key="name" value="moat"');
+  });
+});
+
+describe("icon outlines", () => {
+  it("accepts a closed SVG path and rejects an open stroke", () => {
+    const closed = pathToPolygons("M0 0 L10 0 L10 10 L0 10 Z");
+    expect(isClosedPrintable(closed)).toBe(true);
+    const fromFile = svgTextToPolygons(`<svg><path d="M 0 0 L 8 0 L 4 6 Z"/></svg>`);
+    expect(fromFile.closed).toBe(true);
+    const open = pathToPolygons("M0 0 L10 0 L10 10");
+    expect(isClosedPrintable(open)).toBe(false);
   });
 });
 
@@ -220,7 +265,6 @@ async function assertThreeMf(
   const modelSettings = await zip.file("Metadata/model_settings.config")!.async("string");
   expect(modelSettings).toContain('key="extruder" value="1"');
   expect(modelSettings).toContain('key="extruder" value="2"');
-  expect(modelSettings).toContain('key="extruder" value="3"');
   expect(modelSettings).toContain(`key="filament_maps" value="${expectMeta.filamentMaps}"`);
   expect(modelSettings).toContain("plater_id");
   expect(modelSettings).toContain("normal_part");

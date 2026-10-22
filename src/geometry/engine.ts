@@ -1,28 +1,12 @@
-import Module from "manifold-3d";
 import type { Manifold } from "manifold-3d";
-import type { BowlModel, BowlParams, BowlPart, MeshArrays, StabilityInfo } from "./types";
-import { DEFAULT_PARAMS, minHolderDiameter } from "./types";
-import { fontPolygons } from "./text";
 import type { Font } from "opentype.js";
+import type { BowlModel, BowlParams, BowlPart, MeshArrays, StabilityInfo } from "./types";
+import { DEFAULT_PARAMS, minHolderDiameter, minTrayDiameter } from "./types";
+import { layoutDecorations } from "./text";
+import { wrapPolygonsToCylinder } from "./wrap";
+import { getEngine, initEngine } from "./wasm";
 
-type Wasm = Awaited<ReturnType<typeof Module>>;
-
-let wasm: Wasm | null = null;
-
-export async function initEngine(): Promise<Wasm> {
-  if (wasm) return wasm;
-  const instance = await Module();
-  instance.setup();
-  wasm = instance;
-  return instance;
-}
-
-export function getEngine(): Wasm {
-  if (!wasm) {
-    throw new Error("Manifold engine is not initialized. Call initEngine() first.");
-  }
-  return wasm;
-}
+export { getEngine, initEngine };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -31,13 +15,11 @@ function clamp(value: number, min: number, max: number): number {
 export function resolvedDims(params: BowlParams) {
   const wall = clamp(params.wallThickness, 1.4, 12);
   const bottom = clamp(params.bottomThickness, 1.4, 14);
-  const foot = clamp(params.footHeight, 4, 80);
-  const stand = clamp(params.standHeight, 0, 120);
-  const footTotal = foot + stand;
   const tilt = clamp(params.tiltDeg, 0, 15);
   const tiltRad = (tilt * Math.PI) / 180;
   const rim = clamp(params.rimRadius, 0, 10);
   const clearance = clamp(params.insertClearance, 0.15, 1.6);
+  const fitClearance = clamp(params.fitClearance, 0.2, 1.4);
   const steel = 0.7;
   const lipT = clamp(params.insertLipThickness, 0.8, 2.6);
   const insertRim = clamp(params.insertLipDiameter, 90, 240);
@@ -47,40 +29,55 @@ export function resolvedDims(params: BowlParams) {
   const mouthOuterR = mouthInner / 2 + steel;
   const baseR = baseD / 2;
   const lipR = insertRim / 2;
-  const bodyRMin = minHolderDiameter({
-    insertLipDiameter: insertRim,
-    insertClearance: clearance,
-    wallThickness: wall,
-  }) / 2;
-  const extraWiden = Math.tan(tiltRad) * (footTotal + 40) * 0.25 + stand * 0.08;
-  const rx = Math.max(bodyRMin, clamp(params.bodyDiameter, 90, 320) / 2, bodyRMin + extraWiden * 0.35);
+  const bodyRMin =
+    minHolderDiameter({
+      insertLipDiameter: insertRim,
+      insertClearance: clearance,
+      wallThickness: wall,
+    }) / 2;
+  const rx = Math.max(bodyRMin, clamp(params.bodyDiameter, 90, 320) / 2);
   const bodyH = clamp(params.height, 40, 180);
-  const drop = rx * Math.tan(tiltRad);
-  const zFootTop = footTotal;
-  const zRimCenter = zFootTop + bodyH;
   const pocketMouthR = mouthOuterR + clearance;
   const pocketBaseR = baseR + clearance;
   const pocketLipR = lipR + clearance;
   const lipZ = insertHeight + lipT;
   const tiltSin = Math.sin(tiltRad);
   const tiltCos = Math.max(0.72, Math.cos(tiltRad));
+  const extraBot = rx * Math.tan(tiltRad) + 10;
+  const extraTop = rx * Math.tan(tiltRad) + 6;
   const maxStem = (bodyH - bottom - pocketLipR * tiltSin) / tiltCos;
   const extraDepth = Math.max(0.8, maxStem - lipZ);
-  const footR = rx;
+  const floorT = Math.max(1.8, Math.min(3.2, bottom));
   const moatWidth = clamp(params.moatWidth, 8, 40);
   const moatDepth = clamp(params.moatDepth, 6, 22);
-  const moatDistance = clamp(params.moatDistance, 2, 24);
-  const moatFloor = 1.6;
+  const moatGap = clamp(params.moatGap, 1, 24);
+  const pegR = clamp(rx * 0.69, 18, rx - wall - 6);
+  const socketR = pegR + fitClearance;
+  const islandR = clamp(rx - 8, pegR + wall + 2, rx - 2);
+  const moatInner = islandR + moatGap;
+  const moatOuter = params.moatEnabled ? moatInner + moatWidth : moatInner;
+  const minTrayR = minTrayDiameter({
+    bodyDiameter: rx * 2,
+    wallThickness: wall,
+    moatEnabled: params.moatEnabled,
+    moatWidth,
+    moatGap,
+  }) / 2;
+  const trayR = Math.max(clamp(params.trayDiameter, 110, 420) / 2, minTrayR, moatOuter + wall);
+  const trayH = Math.max(clamp(params.trayHeight, 10, 60), floorT + (params.moatEnabled ? moatDepth : 0) + 2.4);
+  const islandH = Math.max(clamp(params.islandHeight, 10, 80), floorT + (params.moatEnabled ? moatDepth : 0) + 2.2);
+  const pegH = clamp(bodyH * 0.4, 16, 36);
+  const zShoulder = islandH;
+  const zFootTop = islandH;
+  const zRimCenter = zFootTop + bodyH;
   return {
     wall,
     bottom,
-    foot,
-    stand,
-    footTotal,
     tilt,
     tiltRad,
     rim,
     clearance,
+    fitClearance,
     steel,
     lipT,
     insertRim,
@@ -91,19 +88,29 @@ export function resolvedDims(params: BowlParams) {
     insertHeight,
     lipZ,
     extraDepth,
+    extraBot,
+    extraTop,
     pocketMouthR,
     pocketBaseR,
     pocketLipR,
     rx,
     bodyH,
-    drop,
     zFootTop,
     zRimCenter,
-    footR,
+    zShoulder,
+    floorT,
     moatWidth,
     moatDepth,
-    moatDistance,
-    moatFloor,
+    moatGap,
+    moatInner,
+    moatOuter,
+    pegR,
+    socketR,
+    islandR,
+    trayR,
+    trayH,
+    islandH,
+    pegH,
   };
 }
 
@@ -207,50 +214,54 @@ function insertCavityProfile(p: Dims): Array<[number, number]> {
   return closeProfile(pts);
 }
 
-function slantAbove(p: Dims): Manifold {
+function belowZeroCutter(): Manifold {
   const { Manifold } = getEngine();
-  const big = 400;
-  let cutter = Manifold.cube([big, big, big], false).translate(-big / 2, -big / 2, 0);
-  cutter = cutter.rotate(p.tilt, 0, 0).translate(0, 0, p.zRimCenter);
-  return cutter;
-}
-
-function placeOnRim(solid: Manifold, p: Dims, lipZ: number): Manifold {
-  return solid.translate(0, 0, -lipZ).rotate(p.tilt, 0, 0).translate(0, 0, p.zRimCenter);
+  const big = 800;
+  return Manifold.cube([big, big, big], false).translate(-big / 2, -big / 2, -big);
 }
 
 function buildBody(p: Dims): Manifold {
-  const extra = p.drop + 6;
-  const profile: Array<[number, number]> = [
-    [0, p.zFootTop],
-    [p.rx, p.zFootTop],
-    [p.rx, p.zRimCenter + extra],
-  ];
-  if (p.rim > 0.4) {
-    profile.push([p.rx + 0.15, p.zRimCenter + extra]);
-    profile.push([p.rx - p.rim * 0.2, p.zRimCenter + extra + p.rim * 0.35]);
-  }
-  profile.push([0, p.zRimCenter + extra + p.rim]);
-  let body = revolve(closeProfile(profile), 80);
-  const cutter = slantAbove(p);
-  const trimmed = body.subtract(cutter);
-  body.delete();
-  cutter.delete();
-  body = trimmed;
-
-  const lipZ = p.lipZ;
-  let taper = revolve(pocketTaperProfile(p, p.extraDepth), 64);
   const { Manifold } = getEngine();
+  const h = p.bodyH + p.extraTop + p.extraBot;
+  let body = Manifold.cylinder(h, p.rx, p.rx, 80).translate(0, 0, -p.extraBot);
+  if (p.rim > 0.4) {
+    const lip = Manifold.cylinder(p.rim * 0.55, p.rx + 0.15, p.rx - p.rim * 0.15, 80).translate(0, 0, p.bodyH);
+    const withLip = body.add(lip);
+    body.delete();
+    lip.delete();
+    body = withLip;
+  }
+
+  let taper = revolve(pocketTaperProfile(p, p.extraDepth), 64);
   let bore = Manifold.cylinder(p.lipT + 5, p.pocketLipR, p.pocketLipR, 64).translate(0, 0, p.insertHeight);
   const pocket = taper.add(bore);
   taper.delete();
   bore.delete();
-  const placed = placeOnRim(pocket, p, lipZ);
+  const placed = pocket.translate(0, 0, p.bodyH - p.lipZ);
   pocket.delete();
   const hollow = body.subtract(placed);
   body.delete();
   placed.delete();
   return hollow;
+}
+
+function applyTiltAndSeat(solid: Manifold, p: Dims): Manifold {
+  const tilted = solid.rotate(p.tilt, 0, 0);
+  if (tilted !== solid) solid.delete();
+  const cutter = belowZeroCutter();
+  const seated = tilted.subtract(cutter);
+  tilted.delete();
+  cutter.delete();
+  return seated.translate(0, 0, p.zShoulder);
+}
+
+function cutSocket(body: Manifold, p: Dims): Manifold {
+  const { Manifold } = getEngine();
+  const socket = Manifold.cylinder(p.pegH + 2.8, p.socketR, p.socketR, 64).translate(0, 0, p.zShoulder - 0.4);
+  const cut = body.subtract(socket);
+  body.delete();
+  socket.delete();
+  return cut;
 }
 
 function buildInsert(p: Dims): Manifold {
@@ -259,106 +270,70 @@ function buildInsert(p: Dims): Manifold {
   const shell = outer.subtract(cavity);
   outer.delete();
   cavity.delete();
-  const placed = placeOnRim(shell, p, p.lipZ);
-  if (placed !== shell) shell.delete();
-  return placed;
+  const atTop = shell.translate(0, 0, p.bodyH - p.lipZ);
+  if (atTop !== shell) shell.delete();
+  return applyTiltAndSeat(atTop, p);
 }
 
-function buildStand(params: BowlParams, p: Dims): Manifold {
-  const { Manifold, CrossSection } = getEngine();
-  const h = p.footTotal;
-  const topR = p.footR;
-  const flare = Math.min(h * 0.42, Math.tan(p.tiltRad) * (h + p.bodyH) * 0.55 + p.stand * 0.1 + (p.tilt > 0 ? 6 : 0));
-  const botR = topR + flare;
-  const groove = params.antiSlipGroove;
-  const pts: Array<[number, number]> = [[0, 0]];
-  if (groove) {
-    pts.push([botR - 3.6, 0]);
-    pts.push([botR - 3.6, 1.2]);
-    pts.push([botR - 1.6, 1.2]);
-    pts.push([botR - 1.6, 2.6]);
-    pts.push([botR, 2.6]);
-  } else {
-    pts.push([botR, 0]);
+function buildTray(params: BowlParams, p: Dims): Manifold {
+  const { CrossSection } = getEngine();
+  const innerWall = Math.max(p.islandR + 2, p.trayR - p.wall);
+  const waterTop = p.floorT + p.moatDepth;
+  const profile: Array<[number, number]> = [[0, 0]];
+  if (params.antiSlipGroove) {
+    profile.push([p.trayR - 5.6, 0]);
+    profile.push([p.trayR - 5.6, 1.25]);
+    profile.push([p.trayR - 2.3, 1.25]);
+    profile.push([p.trayR - 2.3, 0]);
   }
-  pts.push([botR, Math.min(4, h * 0.2)]);
-  pts.push([topR, h]);
-  pts.push([Math.max(8, topR * 0.72), h]);
-  pts.push([Math.max(8, topR * 0.72), h - 2.2]);
-  pts.push([0, h - 2.2]);
-  let stand = revolve(closeProfile(pts), 72);
+  profile.push([p.trayR, 0]);
+  profile.push([p.trayR, p.trayH]);
+  profile.push([innerWall, p.trayH]);
+  if (params.moatEnabled && p.moatOuter > p.moatInner + 0.8) {
+    profile.push([innerWall, waterTop]);
+    profile.push([p.moatOuter, waterTop]);
+    profile.push([p.moatOuter, p.floorT]);
+    profile.push([p.moatInner, p.floorT]);
+    profile.push([p.moatInner, waterTop]);
+    profile.push([p.islandR, waterTop]);
+  } else {
+    profile.push([innerWall, p.floorT]);
+    profile.push([p.islandR, p.floorT]);
+  }
+  profile.push([p.islandR, p.islandH]);
+  profile.push([p.pegR, p.islandH]);
+  profile.push([p.pegR, p.islandH + p.pegH]);
+  profile.push([0, p.islandH + p.pegH]);
+  let tray = revolve(closeProfile(profile), 80);
 
   if (params.baseTexture !== "smooth") {
-    const ribDepth = 1.2;
-    const ring = toothedRing(botR + 0.2, Math.max(6, topR - ribDepth), params.ribCount);
+    const ring = toothedRing(p.trayR + 1.1, p.trayR + 0.08, params.ribCount);
     const cs = new CrossSection([ring]);
-    const twist = params.baseTexture === "twist" ? 26 : 0;
-    const divisions = params.baseTexture === "twist" ? 12 : 0;
-    const scaleTop = topR / botR;
-    const ribs = cs.extrude(h, divisions, twist, [scaleTop, scaleTop]);
+    const twist = params.baseTexture === "twist" ? 22 : 0;
+    const divisions = params.baseTexture === "twist" ? 10 : 0;
+    const ribs = cs.extrude(Math.max(6, p.trayH - 1), divisions, twist);
     cs.delete();
-    const combined = stand.add(ribs);
-    stand.delete();
+    const combined = tray.add(ribs);
+    tray.delete();
     ribs.delete();
-    stand = combined;
-    const cap = Manifold.cylinder(1.3, topR - 0.4, topR - 0.4, 64).translate(0, 0, h - 1.3);
-    const withCap = stand.add(cap);
-    stand.delete();
-    cap.delete();
-    stand = withCap;
+    tray = combined;
   }
-  return stand;
+  return tray;
 }
 
-function buildMoat(p: Dims): Manifold {
-  const wall = Math.max(2.2, p.wall);
-  const innerWater = p.footR + p.moatDistance;
-  const outerWater = innerWater + p.moatWidth;
-  const floor = Math.max(1.2, p.moatFloor);
-  const free = 1.2;
-  const inner = innerWater - wall;
-  const outer = outerWater + wall;
-  const top = floor + p.moatDepth + free;
-  const profile: Array<[number, number]> = [
-    [inner, 0],
-    [outer, 0],
-    [outer, top],
-    [outerWater, top],
-    [outerWater, floor],
-    [innerWater, floor],
-    [innerWater, floor + p.moatDepth + 0.8],
-    [inner, floor + p.moatDepth + 0.8],
-  ];
-  return revolve(closeProfile(profile), 72);
-}
-
-function buildText(params: BowlParams, p: Dims, font: Font | null): Manifold | null {
-  if (!font || !params.text.trim() || params.embossDepth <= 0) return null;
-  const polygons = fontPolygons(font, params.text.trim(), params.fontSize);
-  if (!polygons.length) return null;
-  const { CrossSection } = getEngine();
-  const cs = new CrossSection(polygons);
-  if (cs.isEmpty()) {
-    cs.delete();
-    return null;
-  }
-  const bounds = cs.bounds();
-  const cx = (bounds.min[0] + bounds.max[0]) / 2;
-  const cy = (bounds.min[1] + bounds.max[1]) / 2;
-  let solid = cs.extrude(params.embossDepth + 0.55);
-  cs.delete();
-  const textZ = p.zFootTop + p.bodyH * 0.42;
-  solid = solid.translate(-cx, -cy, 0).rotate(90, 0, 0).translate(0, -(p.rx - 0.3), textZ);
-  return solid;
-}
-
-function duplicateAlongX(solid: Manifold, offset: number): Manifold {
-  const left = solid.translate(-offset, 0, 0);
-  const right = solid.translate(offset, 0, 0);
-  const both = left.add(right);
-  left.delete();
-  right.delete();
-  return both;
+function buildDecor(
+  params: BowlParams,
+  p: Dims,
+  font: Font | null,
+): { cutter: Manifold | null; inlay: Manifold | null; warnings: string[] } {
+  const layout = layoutDecorations(font, params.text, params.textLine2, params.fontSize, params.icons);
+  if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
+  const depth = clamp(params.embossDepth, 0.4, 4);
+  const zMid = p.bodyH * 0.42;
+  const engrave = params.textStyle !== "emboss";
+  const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, p.rx, depth + 0.45, zMid, 0.12) : null;
+  const inlay = wrapPolygonsToCylinder(layout.polygons, p.rx, depth + (engrave ? 0.05 : 0.15), zMid, engrave ? 0.02 : 0.35);
+  return { cutter, inlay, warnings: layout.warnings };
 }
 
 function meshCentroid(mesh: MeshArrays): [number, number, number] {
@@ -397,44 +372,41 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
   const p = resolvedDims(params);
 
   let body = buildBody(p);
-  let stand = buildStand(params, p);
-  let text = buildText(params, p, font);
-  let insert = buildInsert(p);
-  let moat: Manifold | null = params.moatEnabled ? buildMoat(p) : null;
-
-  if (params.doubleBowl) {
-    const offset = Math.max(p.rx, (moat ? p.footR + p.moatDistance + p.moatWidth + 8 : p.rx)) + 10;
-    const pair = (solid: Manifold) => {
-      const next = duplicateAlongX(solid, offset);
-      solid.delete();
-      return next;
-    };
-    body = pair(body);
-    stand = pair(stand);
-    insert = pair(insert);
-    if (text) text = pair(text);
-    if (moat) moat = pair(moat);
-    const { Manifold } = getEngine();
-    const bar = Manifold.cube([offset * 2, 16, Math.min(8, p.footTotal)], true).translate(0, 0, 3);
-    const bridged = stand.add(bar);
-    stand.delete();
-    bar.delete();
-    stand = bridged;
+  const decor = buildDecor(params, p, font);
+  if (decor.cutter) {
+    try {
+      const cut = body.subtract(decor.cutter);
+      body.delete();
+      body = cut;
+    } catch {
+      // Keep the body if wrap-cut fails; inlay may still print as a separate part.
+    }
+    decor.cutter.delete();
   }
+
+  body = applyTiltAndSeat(body, p);
+  body = cutSocket(body, p);
+
+  let text: Manifold | null = null;
+  if (decor.inlay) {
+    text = applyTiltAndSeat(decor.inlay, p);
+  }
+
+  const tray = buildTray(params, p);
+  const insert = buildInsert(p);
 
   const capR = p.mouthInner / 2;
   const capR0 = Math.max(6, p.baseR - p.steel);
   const insertCap = (Math.PI * p.insertHeight * (capR * capR + capR * capR0 + capR0 * capR0)) / 3;
   const water = params.moatEnabled
-    ? Math.PI * (Math.pow(p.footR + p.moatDistance + p.moatWidth, 2) - Math.pow(p.footR + p.moatDistance, 2)) * p.moatDepth
+    ? Math.PI * (p.moatOuter * p.moatOuter - p.moatInner * p.moatInner) * p.moatDepth
     : 0;
 
-  const parts: BowlPart[] = [partFrom("body", body), partFrom("base", stand)];
+  const parts: BowlPart[] = [partFrom("body", body), partFrom("base", tray)];
   if (text && !text.isEmpty()) parts.push(partFrom("text", text));
-  if (moat && !moat.isEmpty()) parts.push(partFrom("moat", moat));
 
   const insertMesh = meshOf(insert);
-  const solids = [body, stand, text, moat].filter((s): s is Manifold => !!s);
+  const solids = [body, tray, text].filter((s): s is Manifold => !!s);
   const boxes = solids.map((s) => s.boundingBox());
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
@@ -445,14 +417,12 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
     }
   }
 
-  const footprintR = params.moatEnabled
-    ? p.footR + p.moatDistance + p.moatWidth + p.wall
-    : p.footR + Math.min(p.footTotal * 0.42, Math.tan(p.tiltRad) * (p.footTotal + p.bodyH) * 0.55 + p.stand * 0.1 + (p.tilt > 0 ? 6 : 0));
+  const footprintR = p.trayR;
   const stability = stabilityOf(parts, footprintR);
   const manifold =
     parts.every((part) => part.triangleCount > 0 && part.volumeMm3 > 0) &&
     body.status() === "NoError" &&
-    stand.status() === "NoError";
+    tray.status() === "NoError";
 
   const model: BowlModel = {
     parts,
@@ -460,8 +430,8 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
     width: max[0] - min[0],
     depth: max[1] - min[1],
     height: max[2] - min[2],
-    capacityMl: (insertCap / 1000) * (params.doubleBowl ? 2 : 1),
-    moatWaterMl: (water / 1000) * (params.doubleBowl ? 2 : 1),
+    capacityMl: insertCap / 1000,
+    moatWaterMl: water / 1000,
     solidVolumeMm3: parts.reduce((sum, part) => sum + part.volumeMm3, 0),
     triangleCount: parts.reduce((sum, part) => sum + part.triangleCount, 0),
     manifold,
@@ -469,19 +439,25 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
     moatEnabled: params.moatEnabled,
     moatWidth: p.moatWidth,
     moatDepth: p.moatDepth,
-    moatDistance: p.moatDistance,
+    moatGap: p.moatGap,
+    trayDiameter: p.trayR * 2,
+    trayHeight: p.trayH,
+    islandHeight: p.islandH,
+    pegRadius: p.pegR,
+    socketRadius: p.socketR,
+    fitClearance: p.fitClearance,
     insertRimMm: p.insertRim,
     insertMouthMm: p.mouthInner,
     insertBaseMm: p.baseR * 2,
     insertHeightMm: p.insertHeight,
+    iconWarnings: decor.warnings,
     stability,
   };
 
   body.delete();
-  stand.delete();
+  tray.delete();
   insert.delete();
   text?.delete();
-  moat?.delete();
   return model;
 }
 

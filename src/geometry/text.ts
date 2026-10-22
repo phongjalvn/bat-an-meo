@@ -1,4 +1,14 @@
 import type { Font, PathCommand } from "opentype.js";
+import type { IconSlot } from "./types";
+import {
+  boundsOf,
+  hasThinFeatures,
+  libraryPolygons,
+  rotatePolygons,
+  scaleToHeight,
+  translatePolygons,
+  type Polygon,
+} from "./icons";
 
 type Point = [number, number];
 
@@ -33,16 +43,8 @@ function commandPoints(commands: PathCommand[]): Point[][] {
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const u = 1 - t;
-        const x =
-          u * u * u * x0 +
-          3 * u * u * t * cmd.x1 +
-          3 * u * t * t * cmd.x2 +
-          t * t * t * cmd.x;
-        const y =
-          u * u * u * y0 +
-          3 * u * u * t * cmd.y1 +
-          3 * u * t * t * cmd.y2 +
-          t * t * t * cmd.y;
+        const x = u * u * u * x0 + 3 * u * u * t * cmd.x1 + 3 * u * t * t * cmd.x2 + t * t * t * cmd.x;
+        const y = u * u * u * y0 + 3 * u * u * t * cmd.y1 + 3 * u * t * t * cmd.y2 + t * t * t * cmd.y;
         push(x, y);
       }
     } else if (cmd.type === "Q") {
@@ -83,6 +85,73 @@ function flipY(poly: Point[]): Point[] {
 export function fontPolygons(font: Font, text: string, fontSize: number): Point[][] {
   const path = font.getPath(text, 0, 0, fontSize);
   const contours = commandPoints(path.commands).map(flipY).filter((c) => c.length >= 3);
-  // CrossSection unions overlapping contours and treats holes by fill rule.
   return contours.map((c) => (area(c) < 0 ? [...c].reverse() : c));
+}
+
+function centerPolygons(polygons: Polygon[]): Polygon[] {
+  const b = boundsOf(polygons);
+  const cx = (b.minX + b.maxX) / 2;
+  const cy = (b.minY + b.maxY) / 2;
+  return translatePolygons(polygons, -cx, -cy);
+}
+
+export interface DecorLayout {
+  polygons: Polygon[];
+  warnings: string[];
+}
+
+/** Compose name, optional second line, and icons into one unwrapped wall drawing. */
+export function layoutDecorations(
+  font: Font | null,
+  text: string,
+  textLine2: string,
+  fontSize: number,
+  icons: IconSlot[],
+): DecorLayout {
+  const warnings: string[] = [];
+  const parts: Polygon[] = [];
+  const line1 = text.trim();
+  const line2 = textLine2.trim();
+  let name: Polygon[] = [];
+  if (font && line1) name = fontPolygons(font, line1, fontSize);
+  if (font && line2) {
+    const second = fontPolygons(font, line2, Math.max(8, fontSize * 0.62));
+    const firstBox = boundsOf(name);
+    const gap = fontSize * 0.28;
+    const shifted = translatePolygons(second, 0, firstBox.minY - gap - 0.01);
+    name = [...name, ...shifted];
+  }
+  if (name.length) name = centerPolygons(name);
+  const nameBox = boundsOf(name);
+
+  for (const icon of icons) {
+    if (!icon.enabled) continue;
+    let raw: Polygon[] = [];
+    if (icon.kind === "custom") {
+      raw = icon.customPolygons ?? [];
+      if (!raw.length) {
+        warnings.push("icon-empty");
+        continue;
+      }
+    } else {
+      raw = libraryPolygons(icon.kind);
+    }
+    let shaped = scaleToHeight(raw, icon.sizeMm);
+    shaped = rotatePolygons(shaped, icon.rotationDeg);
+    if (hasThinFeatures(shaped)) {
+      warnings.push("icon-thin");
+    }
+    const box = boundsOf(shaped);
+    const iw = box.maxX - box.minX;
+    const gap = Math.max(3, icon.sizeMm * 0.28);
+    let dx = 0;
+    let dy = 0;
+    if (icon.anchor === "left") dx = nameBox.minX - gap - iw / 2;
+    else if (icon.anchor === "right") dx = nameBox.maxX + gap + iw / 2;
+    else dy = nameBox.maxY + gap + (box.maxY - box.minY) / 2;
+    parts.push(...translatePolygons(shaped, dx, dy));
+  }
+
+  const combined = centerPolygons([...name, ...parts]);
+  return { polygons: combined, warnings };
 }

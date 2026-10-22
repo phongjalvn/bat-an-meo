@@ -92,7 +92,7 @@ export class BowlViewer {
       const color = colorOf(part.name);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: part.name === "moat" ? 0.55 : part.name === "base" || part.name === "stand" ? 0.72 : 0.38,
+        roughness: part.name === "base" ? 0.72 : 0.38,
         metalness: part.name === "text" ? 0.08 : 0.02,
       });
       const mesh = new THREE.Mesh(geom, mat);
@@ -143,13 +143,14 @@ export class BowlViewer {
     if (model.tiltDeg > 0.05) {
       addLabel(this.dimGroup, `${model.tiltDeg.toFixed(0)}°`, w * 0.28, h * 0.78, d * 0.18);
     }
+    addLabel(this.dimGroup, `Ø ${model.trayDiameter.toFixed(0)} mm`, 0, 8, d / 2 + 18);
     if (model.moatEnabled) {
       addLabel(
         this.dimGroup,
-        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} mm`,
+        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} · gap ${model.moatGap.toFixed(0)} mm`,
         0,
-        10,
-        d / 2 + 16,
+        18,
+        d / 2 + 28,
       );
     }
   }
@@ -177,7 +178,6 @@ export class BowlViewer {
 }
 
 function colorOf(name: PartName): string {
-  if (name === "stand") return PART_COLORS.base;
   return PART_COLORS[name] ?? PART_COLORS.body;
 }
 
