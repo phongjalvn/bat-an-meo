@@ -7,6 +7,7 @@ export default defineConfig({
     host: true,
     port: 5173,
   },
+  assetsInclude: ["**/*.wasm"],
   optimizeDeps: {
     exclude: ["manifold-3d"],
   },

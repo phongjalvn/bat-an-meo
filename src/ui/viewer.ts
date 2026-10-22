@@ -26,10 +26,10 @@ export class BowlViewer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x15181e);
     this.camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
-    this.camera.position.set(220, 160, 260);
+    this.camera.position.set(250, 105, 230);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.target.set(0, 50, 0);
+    this.controls.target.set(0, 42, 0);
 
     const hemi = new THREE.HemisphereLight(0xf3efe6, 0x2a2620, 0.9);
     const key = new THREE.DirectionalLight(0xffffff, 1.35);
@@ -71,8 +71,8 @@ export class BowlViewer {
     if (view === "front") this.camera.position.set(0, h * 0.55, Math.max(w, h) * 2.2);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
     else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.2, h * 0.55, 0);
-    else this.camera.position.set(w * 1.4, h * 1.25, w * 1.7);
-    this.controls.target.set(0, h * 0.45, 0);
+    else this.camera.position.set(w * 1.35, Math.max(58, h * 0.42), w * 1.05);
+    this.controls.target.set(0, h * 0.38, 0);
     this.controls.update();
   }
 
@@ -92,7 +92,7 @@ export class BowlViewer {
       const color = colorOf(part.name);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: part.name === "moat" ? 0.55 : part.name === "base" || part.name === "stand" ? 0.72 : 0.38,
+        roughness: part.name === "base" ? 0.72 : 0.38,
         metalness: part.name === "text" ? 0.08 : 0.02,
       });
       const mesh = new THREE.Mesh(geom, mat);
@@ -116,7 +116,7 @@ export class BowlViewer {
     const plateScale = Math.max(1, model.width / 220);
     this.plate.scale.set(plateScale, plateScale, 1);
     this.drawDimensions(model);
-    this.controls.target.set(0, model.height * 0.42, 0);
+    this.controls.target.set(0, model.height * 0.38, 0);
   }
 
   private drawDimensions(model: BowlModel) {
@@ -143,13 +143,14 @@ export class BowlViewer {
     if (model.tiltDeg > 0.05) {
       addLabel(this.dimGroup, `${model.tiltDeg.toFixed(0)}°`, w * 0.28, h * 0.78, d * 0.18);
     }
+    addLabel(this.dimGroup, `Ø ${model.trayDiameter.toFixed(0)} mm`, 0, 8, d / 2 + 18);
     if (model.moatEnabled) {
       addLabel(
         this.dimGroup,
-        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} mm`,
+        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} · gap ${model.moatGap.toFixed(0)} mm`,
         0,
-        10,
-        d / 2 + 16,
+        18,
+        d / 2 + 28,
       );
     }
   }
@@ -177,7 +178,6 @@ export class BowlViewer {
 }
 
 function colorOf(name: PartName): string {
-  if (name === "stand") return PART_COLORS.base;
   return PART_COLORS[name] ?? PART_COLORS.body;
 }
 
