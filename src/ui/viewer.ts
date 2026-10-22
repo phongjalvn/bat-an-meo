@@ -71,7 +71,7 @@ export class BowlViewer {
     if (view === "front") this.camera.position.set(0, h * 0.48, Math.max(w, h) * 2.05);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
     else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.05, h * 0.48, 0);
-    else this.camera.position.set(w * 0.8, h * 0.82, w * 1.52);
+    else this.camera.position.set(w * 0.78, h * 0.58, w * 1.72);
     this.controls.target.set(0, h * 0.42, 0);
     this.controls.update();
   }

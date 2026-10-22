@@ -5,7 +5,7 @@ import {
   PARAM_LIMITS,
   applyInsertSize,
   cloneIcons,
-  minHolderDiameter,
+  minTopDiameter,
   minTrayDiameter,
   normalizeParams,
   type BowlParams,
@@ -27,7 +27,7 @@ import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
 
-const SIZE_KEYS = ["bodyDiameter", "height", "mouthShrink", "trayDiameter", "trayHeight", "rimRadius"] as const;
+const SIZE_KEYS = ["bodyDiameter", "rimMargin", "height", "mouthShrink", "trayDiameter", "trayHeight", "rimRadius"] as const;
 const STRUCT_KEYS = ["wallThickness", "bottomThickness", "islandHeight", "insertClearance", "fitClearance"] as const;
 const CATCARE_KEYS = ["tiltDeg"] as const;
 const MOAT_KEYS = ["moatWidth", "moatDepth", "moatGap"] as const;
@@ -453,7 +453,7 @@ export class App {
     document.querySelectorAll("[data-insert]").forEach((el) => {
       el.addEventListener("click", () => {
         const size = (el as HTMLElement).dataset.insert as InsertSizeId;
-        this.params = applyInsertSize(this.params, size);
+        this.params = applyInsertSize({ ...this.params, linkBodyToInsert: true }, size);
         this.saved = false;
         this.render();
         void this.rebuild();
@@ -480,7 +480,16 @@ export class App {
         ) {
           this.params.insertSize = "custom";
         }
+        if (key === "bodyDiameter") this.params.linkBodyToInsert = false;
         if (key === "insertHeight") this.params.innerDepth = value;
+        if (this.params.linkBodyToInsert && (key === "rimMargin" || key === "insertLipDiameter" || key === "mouthShrink")) {
+          if (key !== "mouthShrink") {
+            this.params.bodyDiameter = this.params.insertLipDiameter + 2 * this.params.rimMargin;
+          }
+          this.params.trayDiameter = this.params.bodyDiameter + 2 * this.params.mouthShrink + 13;
+          this.syncTwinInputs("bodyDiameter", this.params.bodyDiameter);
+          this.syncTwinInputs("trayDiameter", this.params.trayDiameter);
+        }
         this.fitHolderToInsert();
         this.saved = false;
         this.queueRebuild();
@@ -642,7 +651,7 @@ export class App {
   }
 
   private fitHolderToInsert() {
-    const minD = minHolderDiameter(this.params);
+    const minD = minTopDiameter(this.params);
     if (this.params.bodyDiameter < minD) {
       this.params.bodyDiameter = minD;
       this.syncTwinInputs("bodyDiameter", minD);
@@ -776,6 +785,7 @@ function section(id: string, title: string, open: boolean, body: string): string
 function labelFor(key: string): StringKey {
   const map: Record<string, StringKey> = {
     bodyDiameter: "bodyDiameter",
+    rimMargin: "rimMargin",
     height: "height",
     innerDepth: "innerDepth",
     rimRadius: "rimRadius",

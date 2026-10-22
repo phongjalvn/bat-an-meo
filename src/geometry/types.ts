@@ -53,6 +53,10 @@ export function cloneIcons(icons: IconSlot[] | undefined): IconSlot[] {
 
 export interface BowlParams {
   bodyDiameter: number;
+  /** When true, top diameter follows the insert lip plus rim margin. */
+  linkBodyToInsert: boolean;
+  /** Radial cream margin between the steel lip and the body top, mm. */
+  rimMargin: number;
   height: number;
   innerDepth: number;
   wallThickness: number;
@@ -87,14 +91,15 @@ export interface BowlParams {
 }
 
 export const PARAM_LIMITS = {
-  bodyDiameter: { min: 90, max: 320, step: 1 },
+  bodyDiameter: { min: 90, max: 340, step: 1 },
+  rimMargin: { min: 6, max: 16, step: 0.5 },
   height: { min: 40, max: 180, step: 1 },
   innerDepth: { min: 15, max: 90, step: 1 },
   wallThickness: { min: 1.6, max: 8, step: 0.1 },
   bottomThickness: { min: 1.6, max: 10, step: 0.1 },
   mouthShrink: { min: 0, max: 20, step: 0.5 },
   trayDiameter: { min: 110, max: 420, step: 1 },
-  trayHeight: { min: 10, max: 70, step: 0.5 },
+  trayHeight: { min: 16, max: 70, step: 0.5 },
   islandHeight: { min: 10, max: 80, step: 0.5 },
   rimRadius: { min: 0, max: 10, step: 0.1 },
   tiltDeg: { min: 0, max: 15, step: 0.5 },
@@ -113,16 +118,18 @@ export const PARAM_LIMITS = {
 } as const;
 
 export const DEFAULT_PARAMS: BowlParams = {
-  bodyDiameter: 190,
+  bodyDiameter: 150,
+  linkBodyToInsert: true,
+  rimMargin: 10,
   height: 103,
   innerDepth: 40,
   wallThickness: 3,
   bottomThickness: 3,
   mouthShrink: 9,
-  trayDiameter: 206,
-  trayHeight: 32,
-  islandHeight: 14,
-  rimRadius: 8,
+  trayDiameter: 181,
+  trayHeight: 22,
+  islandHeight: 10,
+  rimRadius: 6,
   tiltDeg: 15,
   moatEnabled: true,
   moatWidth: 12,
@@ -228,8 +235,18 @@ export function minHolderDiameter(
   return params.insertLipDiameter + 2 * params.wallThickness + 2 * params.insertClearance;
 }
 
-export function minTrayDiameter(params: Pick<BowlParams, "bodyDiameter">): number {
-  return params.bodyDiameter + 10;
+/** Smallest printable top diameter: lip plus a wall that can hold the fillet. */
+export function minTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "wallThickness">): number {
+  return params.insertLipDiameter + 2 * Math.max(4, params.wallThickness + 1.2);
+}
+
+/** Tray outer diameter is at least 10 mm larger than the body's wide base. */
+export function minTrayDiameter(params: Pick<BowlParams, "bodyDiameter" | "mouthShrink">): number {
+  return params.bodyDiameter + 2 * params.mouthShrink + 10;
+}
+
+export function autoTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "rimMargin">): number {
+  return params.insertLipDiameter + 2 * params.rimMargin;
 }
 
 export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlParams {
@@ -243,12 +260,19 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
     next.insertLipThickness = preset.lipThicknessMm;
   }
   next.innerDepth = next.insertHeight;
-  next.bodyDiameter = Math.max(next.bodyDiameter, minHolderDiameter(next));
+  next.rimMargin = next.rimMargin || DEFAULT_PARAMS.rimMargin;
+  if (next.linkBodyToInsert !== false) {
+    next.linkBodyToInsert = true;
+    next.bodyDiameter = Math.max(minTopDiameter(next), autoTopDiameter(next));
+    next.trayDiameter = next.bodyDiameter + 2 * next.mouthShrink + 13;
+  } else {
+    next.bodyDiameter = Math.max(next.bodyDiameter, minTopDiameter(next));
+    next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
+  }
   const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
   const lipZ = next.insertHeight + next.insertLipThickness;
   const minH = Math.ceil(lipZ + next.bottomThickness + next.insertLipDiameter * Math.tan(tiltRad) + 12);
   next.height = Math.max(next.height, minH);
-  next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
   return next;
 }
 
@@ -257,6 +281,8 @@ type LegacyInsert = Omit<Partial<BowlParams>, "insertSize" | "icons"> & {
   insertDiameter?: number;
   insertDepth?: number;
   insertLipWidth?: number;
+  linkBodyToInsert?: boolean;
+  rimMargin?: number;
   doubleBowl?: boolean;
   moatDistance?: number;
   standHeight?: number;
@@ -294,6 +320,8 @@ export function normalizeParams(raw: LegacyInsert | undefined): BowlParams {
   const merged: BowlParams = {
     ...DEFAULT_PARAMS,
     bodyDiameter: incoming.bodyDiameter ?? DEFAULT_PARAMS.bodyDiameter,
+    linkBodyToInsert: incoming.linkBodyToInsert ?? true,
+    rimMargin: incoming.rimMargin ?? DEFAULT_PARAMS.rimMargin,
     height: incoming.height ?? DEFAULT_PARAMS.height,
     innerDepth: incoming.innerDepth ?? DEFAULT_PARAMS.innerDepth,
     wallThickness: incoming.wallThickness ?? DEFAULT_PARAMS.wallThickness,
