@@ -17,6 +17,23 @@ export class BowlViewer {
   private dimGroup = new THREE.Group();
   private frame = 0;
   showPlate = true;
+  private exploded = false;
+  private model: BowlModel | undefined;
+
+  setExploded(exploded: boolean) {
+    this.exploded = exploded;
+    if (this.model) this.applyLayout(this.model);
+  }
+
+  private applyLayout(model: BowlModel) {
+    const gap = Math.max(35, model.height * 0.5);
+    for (const child of this.group.children) {
+      const name = child.name;
+      child.position.set(0, this.exploded && name !== "base" ? gap * (name === "insert" ? 2 : 1) : 0, 0);
+      if (this.exploded && name === "text") child.position.z = model.depth * 0.4;
+    }
+    this.dimGroup.visible = !this.exploded;
+  }
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -67,7 +84,7 @@ export class BowlViewer {
   }
 
   setView(view: CameraView, model?: BowlModel) {
-    const h = model?.height ?? 110;
+    const h = (model?.height ?? 110) + (this.exploded ? Math.max(35, (model?.height ?? 110) * 0.5) * 2 : 0);
     const w = model?.width ?? 130;
     if (view === "front") this.camera.position.set(0, h * 0.48, Math.max(w, h) * 2.05);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
@@ -86,7 +103,7 @@ export class BowlViewer {
   setModel(model: BowlModel) {
     this.group.clear();
     this.dimGroup.clear();
-    const lift = -0;
+    this.model = model;
     for (const part of model.parts) {
       const raw = toGeometry(part.mesh.positions, part.mesh.indices);
       const geom = toCreasedNormals(raw, Math.PI / 5);
@@ -99,7 +116,7 @@ export class BowlViewer {
       });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = lift;
+      mesh.name = part.name;
       this.group.add(mesh);
     }
     if (model.insert) {
@@ -112,11 +129,13 @@ export class BowlViewer {
       });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
+      mesh.name = "insert";
       this.group.add(mesh);
     }
     const plateScale = Math.max(1, model.width / 220);
     this.plate.scale.set(plateScale, plateScale, 1);
     this.drawDimensions(model);
+    this.applyLayout(model);
     this.controls.target.set(0, model.height * 0.38, 0);
   }
 

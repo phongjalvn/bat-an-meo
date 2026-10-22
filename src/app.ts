@@ -5,8 +5,8 @@ import {
   PARAM_LIMITS,
   applyInsertSize,
   cloneIcons,
-  minTopDiameter,
-  minTrayDiameter,
+  constrainParams,
+  getParamLimits,
   normalizeParams,
   type BowlParams,
   type IconAnchor,
@@ -38,6 +38,7 @@ const CUSTOM_INSERT_KEYS = [
   "insertMouthDiameter",
   "insertBaseDiameter",
   "insertHeight",
+  "insertClearance",
 ] as const;
 const ICON_KINDS: IconKind[] = ["paw", "cat", "dog", "heart", "fish", "bone", "star", "custom"];
 
@@ -55,6 +56,7 @@ export class App {
   private rebuildTimer = 0;
   private leftTab: "design" | "presets" = "design";
   private view: CameraView = "3d";
+  private exploded = false;
   private open: Record<string, boolean> = {
     size: true,
     structure: true,
@@ -86,15 +88,33 @@ export class App {
   private render() {
     const root = document.querySelector("#app");
     if (!root) return;
+    // Rendering replaces the scroll containers, so retain their offsets first.
+    const panelScroll = [".panel.left", ".panel.right"].map((selector) => {
+      const panel = root.querySelector(selector);
+      return { selector, top: panel?.scrollTop ?? 0, left: panel?.scrollLeft ?? 0 };
+    });
+    const page = document.scrollingElement ?? document.documentElement;
+    const pageScroll = { top: page.scrollTop, left: page.scrollLeft };
     root.innerHTML = this.markup();
     this.bind();
     const canvas = root.querySelector("canvas");
     if (canvas instanceof HTMLCanvasElement) {
       this.viewer?.dispose();
       this.viewer = new BowlViewer(canvas);
+      this.viewer.setExploded(this.exploded);
       if (this.model) this.viewer.setModel(this.model);
+      this.viewer.setView(this.view, this.model ?? undefined);
     }
     this.syncInfo();
+    for (const { selector, top, left } of panelScroll) {
+      const panel = root.querySelector(selector);
+      if (panel) {
+        panel.scrollTop = top;
+        panel.scrollLeft = left;
+      }
+    }
+    page.scrollTop = pageScroll.top;
+    page.scrollLeft = pageScroll.left;
   }
 
   private markup(): string {
@@ -130,6 +150,7 @@ export class App {
             <div class="view-switch">
               ${(["3d", "front", "top", "side"] as CameraView[]).map((v) => `<button data-view="${v}" class="${this.view === v ? "active" : ""}">${L(viewKey(v))}</button>`).join("")}
             </div>
+            <button class="explode-toggle" id="explode" aria-pressed="${this.exploded}">${L(this.exploded ? "viewAssembled" : "viewExploded")}</button>
             <div class="zoom">
               <button id="zoom-in">+</button>
               <button id="zoom-out">−</button>
@@ -191,7 +212,8 @@ export class App {
         "structure",
         L("structure"),
         this.open.structure,
-        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
+        `<div class="hint">${L("printLimitsHint")}</div>` +
+          STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
           this.toggle("windowEnabled", L("window")),
       )}
       ${section(
@@ -286,9 +308,10 @@ export class App {
           <div class="field">
             <label>${L("iconSize")}</label>
             <div class="row">
-              <input type="range" data-icon-size="${icon.id}" min="6" max="22" step="0.5" value="${icon.sizeMm}" />
-              <div class="num"><input type="number" data-icon-size="${icon.id}" min="6" max="22" step="0.5" value="${icon.sizeMm}" /><span>mm</span></div>
+              <input type="range" data-icon-size="${icon.id}" min="6" max="22" step="1" value="${icon.sizeMm}" />
+              <div class="num"><input type="number" data-icon-size="${icon.id}" min="6" max="22" step="1" value="${icon.sizeMm}" /><span>mm</span></div>
             </div>
+            <div class="param-bounds">${this.boundsMarkup(6, 22, "mm")}</div>
           </div>
           <div class="field">
             <label>${L("iconRotate")}</label>
@@ -296,6 +319,7 @@ export class App {
               <input type="range" data-icon-rot="${icon.id}" min="-180" max="180" step="5" value="${icon.rotationDeg}" />
               <div class="num"><input type="number" data-icon-rot="${icon.id}" min="-180" max="180" step="5" value="${icon.rotationDeg}" /><span>°</span></div>
             </div>
+            <div class="param-bounds">${this.boundsMarkup(-180, 180, "°")}</div>
           </div>
           <label class="upload">${L("iconUpload")}<input type="file" accept=".svg,image/svg+xml,.png,image/png" data-icon-file="${icon.id}" /></label>
           ${icon.featureWarning ? `<div class="warn">${L("iconThin")}</div>` : ""}
@@ -350,7 +374,7 @@ export class App {
   }
 
   private slider(key: keyof typeof PARAM_LIMITS, label: string): string {
-    const lim = PARAM_LIMITS[key];
+    const lim = this.paramLimits(key);
     const value = this.params[key] as number;
     const unit = key === "ribCount" ? "" : key === "tiltDeg" ? "°" : "mm";
     return `
@@ -363,8 +387,31 @@ export class App {
             <span>${unit}</span>
           </div>
         </div>
+        <div class="param-bounds" data-bounds="${key}">${this.boundsMarkup(lim.min, lim.max, unit)}</div>
       </div>
     `;
+  }
+
+  private paramLimits(key: keyof typeof PARAM_LIMITS) {
+    return getParamLimits(this.params, key);
+  }
+
+  private boundsMarkup(min: number, max: number, unit: string): string {
+    const format = (value: number) => `${Number(value.toFixed(2)).toLocaleString(this.locale === "vi" ? "vi-VN" : "en-US")} ${unit}`.trim();
+    return `<span>${t(this.locale, "minimum")}: ${format(min)}</span><span>${t(this.locale, "maximum")}: ${format(max)}</span>`;
+  }
+
+  private syncParamLimits() {
+    for (const key of Object.keys(PARAM_LIMITS) as Array<keyof typeof PARAM_LIMITS>) {
+      const limits = this.paramLimits(key);
+      document.querySelectorAll<HTMLInputElement>(`[data-param="${key}"]`).forEach((input) => {
+        input.min = String(limits.min);
+        input.max = String(limits.max);
+        input.value = String(this.params[key]);
+      });
+      const bounds = document.querySelector(`[data-bounds="${key}"]`);
+      if (bounds) bounds.innerHTML = this.boundsMarkup(limits.min, limits.max, key === "ribCount" ? "" : key === "tiltDeg" ? "°" : "mm");
+    }
   }
 
   private toggle(key: "antiSlipGroove" | "moatEnabled" | "windowEnabled", label: string): string {
@@ -466,16 +513,23 @@ export class App {
     document.querySelectorAll("[data-style]").forEach((el) => {
       el.addEventListener("click", () => {
         this.params.textStyle = (el as HTMLElement).dataset.style as TextStyle;
+        this.params = constrainParams(this.params);
         this.saved = false;
         this.render();
         void this.rebuild();
       });
     });
     document.querySelectorAll("[data-param]").forEach((el) => {
-      el.addEventListener("input", (event) => {
+      el.addEventListener((el as HTMLInputElement).type === "number" ? "change" : "input", (event) => {
         const key = (el as HTMLElement).dataset.param as keyof typeof PARAM_LIMITS;
-        const value = Number((event.target as HTMLInputElement).value);
-        (this.params[key] as number) = value;
+        const input = event.target as HTMLInputElement;
+        if (input.value === "" || !Number.isFinite(input.valueAsNumber)) {
+          this.syncParamLimits();
+          return;
+        }
+        const limits = this.paramLimits(key);
+        const value = Math.min(limits.max, Math.max(limits.min, input.valueAsNumber));
+        (this.params[key] as number) = key === "ribCount" ? Math.round(value) : value;
         if (
           key === "insertLipDiameter" ||
           key === "insertMouthDiameter" ||
@@ -492,19 +546,20 @@ export class App {
             this.syncTwinInputs(synced, this.params[synced]);
           }
         }
-        this.fitHolderToInsert();
+        this.params = constrainParams(this.params);
         this.saved = false;
         this.queueRebuild();
-        this.syncTwinInputs(key, value);
+        this.syncParamLimits();
       });
     });
     document.querySelectorAll("[data-toggle]").forEach((el) => {
       el.addEventListener("change", () => {
         const key = (el as HTMLElement).dataset.toggle as "antiSlipGroove" | "moatEnabled" | "windowEnabled";
         this.params[key] = (el as HTMLInputElement).checked;
+        this.params = constrainParams(this.params);
+        this.syncParamLimits();
         this.saved = false;
         if (key === "moatEnabled") {
-          this.params.trayDiameter = Math.max(this.params.trayDiameter, minTrayDiameter(this.params));
           this.render();
         }
         void this.rebuild();
@@ -542,6 +597,16 @@ export class App {
           btn.classList.toggle("active", (btn as HTMLElement).dataset.view === this.view);
         });
       });
+    });
+    q("#explode")?.addEventListener("click", () => {
+      this.exploded = !this.exploded;
+      this.viewer?.setExploded(this.exploded);
+      this.viewer?.setView(this.view, this.model ?? undefined);
+      const button = q("#explode");
+      if (button) {
+        button.textContent = t(this.locale, this.exploded ? "viewAssembled" : "viewExploded");
+        button.setAttribute("aria-pressed", String(this.exploded));
+      }
     });
     q("#zoom-in")?.addEventListener("click", () => this.viewer?.zoom(1));
     q("#zoom-out")?.addEventListener("click", () => this.viewer?.zoom(-1));
@@ -594,11 +659,16 @@ export class App {
       });
     });
     document.querySelectorAll("[data-icon-size]").forEach((el) => {
-      el.addEventListener("input", (event) => {
+      el.addEventListener((el as HTMLInputElement).type === "number" ? "change" : "input", (event) => {
         const id = (el as HTMLElement).dataset.iconSize;
         const icon = this.params.icons.find((item) => item.id === id);
         if (!icon) return;
-        icon.sizeMm = Number((event.target as HTMLInputElement).value);
+        const input = event.target as HTMLInputElement;
+        if (input.value === "" || !Number.isFinite(input.valueAsNumber)) {
+          input.value = String(icon.sizeMm);
+          return;
+        }
+        icon.sizeMm = Math.min(22, Math.max(6, Math.round(input.valueAsNumber)));
         document.querySelectorAll(`[data-icon-size="${id}"]`).forEach((node) => {
           (node as HTMLInputElement).value = String(icon.sizeMm);
         });
@@ -607,11 +677,16 @@ export class App {
       });
     });
     document.querySelectorAll("[data-icon-rot]").forEach((el) => {
-      el.addEventListener("input", (event) => {
+      el.addEventListener((el as HTMLInputElement).type === "number" ? "change" : "input", (event) => {
         const id = (el as HTMLElement).dataset.iconRot;
         const icon = this.params.icons.find((item) => item.id === id);
         if (!icon) return;
-        icon.rotationDeg = Number((event.target as HTMLInputElement).value);
+        const input = event.target as HTMLInputElement;
+        if (input.value === "" || !Number.isFinite(input.valueAsNumber)) {
+          input.value = String(icon.rotationDeg);
+          return;
+        }
+        icon.rotationDeg = Math.min(180, Math.max(-180, input.valueAsNumber));
         document.querySelectorAll(`[data-icon-rot="${id}"]`).forEach((node) => {
           (node as HTMLInputElement).value = String(icon.rotationDeg);
         });
@@ -649,19 +724,6 @@ export class App {
       void this.rebuild();
     } catch (error) {
       console.warn("Icon import failed", error);
-    }
-  }
-
-  private fitHolderToInsert() {
-    const minD = minTopDiameter(this.params);
-    if (this.params.bodyDiameter < minD) {
-      this.params.bodyDiameter = minD;
-      this.syncTwinInputs("bodyDiameter", minD);
-    }
-    const minTray = minTrayDiameter(this.params);
-    if (this.params.trayDiameter < minTray) {
-      this.params.trayDiameter = minTray;
-      this.syncTwinInputs("trayDiameter", minTray);
     }
   }
 
@@ -765,7 +827,7 @@ export class App {
   private async exportNow(kind: "stl" | "bambu" | "u1" | "scad") {
     const button = document.querySelector<HTMLButtonElement>("#export");
     if(button?.disabled) return;
-    const params = structuredClone(this.params);
+    const params = constrainParams(structuredClone(this.params));
     const stem = exportFileStem(params);
     if(button) { button.disabled = true; button.textContent = kind === "scad" ? "Đang xuất…" : "OpenSCAD đang render…"; }
     try {

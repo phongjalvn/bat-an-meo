@@ -99,28 +99,28 @@ export interface BowlParams {
 
 export const PARAM_LIMITS = {
   bodyDiameter: { min: 90, max: 380, step: 1 },
-  rimMargin: { min: 6, max: 16, step: 0.5 },
-  height: { min: 40, max: 220, step: 0.5 },
+  rimMargin: { min: 6, max: 16, step: 1 },
+  height: { min: 40, max: 220, step: 1 },
   innerDepth: { min: 15, max: 90, step: 1 },
-  wallThickness: { min: 1.6, max: 8, step: 0.1 },
-  bottomThickness: { min: 1.6, max: 10, step: 0.1 },
-  mouthShrink: { min: 0, max: 40, step: 0.5 },
+  wallThickness: { min: 2.4, max: 6, step: 0.1 },
+  bottomThickness: { min: 2.4, max: 6, step: 0.1 },
+  mouthShrink: { min: 0, max: 40, step: 1 },
   trayDiameter: { min: 110, max: 420, step: 1 },
-  trayHeight: { min: 16, max: 130, step: 0.5 },
-  islandHeight: { min: 8, max: 90, step: 0.5 },
+  trayHeight: { min: 16, max: 130, step: 1 },
+  islandHeight: { min: 8, max: 90, step: 1 },
   rimRadius: { min: 0, max: 10, step: 0.1 },
-  tiltDeg: { min: 0, max: 15, step: 0.5 },
-  moatWidth: { min: 3, max: 20, step: 0.5 },
-  moatDepth: { min: 6, max: 22, step: 0.5 },
-  moatGap: { min: 1, max: 24, step: 0.5 },
-  fitClearance: { min: 0.2, max: 1.2, step: 0.05 },
-  insertLipDiameter: { min: 90, max: 260, step: 0.5 },
-  insertMouthDiameter: { min: 60, max: 220, step: 0.5 },
-  insertBaseDiameter: { min: 40, max: 180, step: 0.5 },
-  insertHeight: { min: 20, max: 80, step: 0.5 },
-  insertClearance: { min: 0.2, max: 1.2, step: 0.05 },
-  fontSize: { min: 8, max: 36, step: 0.5 },
-  embossDepth: { min: 0.4, max: 4, step: 0.1 },
+  tiltDeg: { min: 0, max: 15, step: 1 },
+  moatWidth: { min: 3, max: 20, step: 1 },
+  moatDepth: { min: 6, max: 22, step: 1 },
+  moatGap: { min: 1, max: 24, step: 1 },
+  fitClearance: { min: 0.3, max: 0.6, step: 0.05 },
+  insertLipDiameter: { min: 90, max: 260, step: 1 },
+  insertMouthDiameter: { min: 60, max: 220, step: 1 },
+  insertBaseDiameter: { min: 40, max: 180, step: 1 },
+  insertHeight: { min: 20, max: 80, step: 1 },
+  insertClearance: { min: 0.3, max: 0.6, step: 0.05 },
+  fontSize: { min: 8, max: 36, step: 1 },
+  embossDepth: { min: 0.4, max: 2, step: 0.1 },
   ribCount: { min: 12, max: 96, step: 1 },
 } as const;
 
@@ -141,7 +141,7 @@ export const DEFAULT_PARAMS: BowlParams = {
   tiltDeg: 15,
   moatEnabled: true,
   moatWidth: 14,
-  moatDepth: 10,
+  moatDepth: 18,
   moatGap: 2,
   fitClearance: 0.45,
   insertSize: "small",
@@ -264,17 +264,91 @@ export function minHolderDiameter(
   return params.insertLipDiameter + 2 * params.wallThickness + 2 * params.insertClearance;
 }
 
-/** Top diameter must clear the lip opening, the wall, and a small fillet. */
-export function minTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "wallThickness">): number {
-  return lipOpeningDiameter(params.insertLipDiameter) + 2 * params.wallThickness + 8;
+/** Clear the insert, the tapered mouth, and the wall without the engine silently changing the taper. */
+export function minTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "wallThickness"> & Partial<Pick<BowlParams, "mouthShrink">>): number {
+  return Math.max(
+    lipOpeningDiameter(params.insertLipDiameter) + 2 * params.wallThickness + 8,
+    params.insertLipDiameter + 2 * (params.wallThickness + 1 + (params.mouthShrink ?? 0)),
+  );
 }
 
-/** Tray outer diameter clears the foot, the wall, and a land for the moat. */
-export function minTrayDiameter(
-  params: Pick<BowlParams, "bodyDiameter" | "mouthShrink" | "wallThickness">,
-): number {
+/** Use the same support and channel radii as the generated cross section. */
+export function minTrayDiameter(params: Pick<BowlParams, "bodyDiameter" | "mouthShrink" | "wallThickness"> & Partial<BowlParams>): number {
   const foot = params.bodyDiameter - 2 * params.mouthShrink;
-  return foot + 2 * Math.max(1.6, params.wallThickness) + 12;
+  const outerFoot = foot + 2 * params.wallThickness + 12;
+  if (params.referenceShape === false) {
+    return Math.max(outerFoot, params.moatEnabled
+      ? foot + 2 * ((params.fitClearance ?? 0.45) + (params.moatGap ?? 2) + (params.moatWidth ?? 14) + params.wallThickness + 0.85)
+      : outerFoot);
+  }
+  const support = params.bodyDiameter * 0.386 + 3 * (params.insertLipDiameter ?? 130) / 130;
+  const trayWall = Math.max(1.6, Math.min(2.4, params.wallThickness * 2 / 3));
+  const channel = params.moatEnabled ? (params.moatGap ?? 2) + (params.moatWidth ?? 14) + 0.5 : 1;
+  return Math.max(outerFoot, 2 * (support + params.wallThickness + 4), 2 * (support + channel + trayWall));
+}
+
+export type ParamKey = keyof typeof PARAM_LIMITS;
+export interface ParamLimit { min: number; max: number; step: number }
+const ceilStep = (value: number, step: number) => Number((Math.ceil((value - 1e-8) / step) * step).toFixed(4));
+const floorStep = (value: number, step: number) => Number((Math.floor((value + 1e-8) / step) * step).toFixed(4));
+
+function minBodyHeight(p: BowlParams): number {
+  const angle = p.tiltDeg * Math.PI / 180;
+  const lift = 6 * refScale(p.insertLipDiameter) + p.fitClearance;
+  const support = p.referenceShape ? Math.max(4, p.islandHeight - lift) : 0;
+  // Keep the tilted insert above the support. Also keep the smooth tilt warp
+  // monotonic in Z (its maximum derivative is less than 2.5 / body height).
+  return Math.max(40, p.insertHeight + support + p.insertLipDiameter / 2 * Math.sin(angle) + 3,
+    2.6 * p.bodyDiameter / 2 * Math.tan(angle) + Math.max(2.4, p.bottomThickness) + 3);
+}
+
+/** Bounds shown in the UI describe the actual current geometry, not just independent constants. */
+export function getParamLimits(p: BowlParams, key: ParamKey): ParamLimit {
+  const limit: ParamLimit = { ...PARAM_LIMITS[key] };
+  if (key === "bodyDiameter") limit.min = Math.max(limit.min, minTopDiameter(p));
+  if (key === "trayDiameter") limit.min = Math.max(limit.min, minTrayDiameter(p));
+  if (key === "height") limit.min = Math.max(limit.min, minBodyHeight(p));
+  if (key === "mouthShrink") limit.max = Math.min(limit.max, (p.bodyDiameter - p.insertLipDiameter) / 2 - p.wallThickness - 1);
+  if (key === "insertMouthDiameter") limit.max = Math.min(limit.max, p.insertLipDiameter - 8);
+  if (key === "insertBaseDiameter") limit.max = Math.min(limit.max, p.insertMouthDiameter - 4);
+  if (key === "rimRadius") limit.max = Math.min(limit.max, p.wallThickness,
+    p.referenceShape ? p.trayHeight * 36.8 / 60 / 2 - 0.2 : limit.max);
+  if (key === "embossDepth" && p.textStyle === "engrave") limit.max = Math.min(limit.max, p.wallThickness - 1.2);
+  if (key === "trayHeight" && p.moatEnabled) {
+    limit.min = Math.max(limit.min, p.referenceShape ? (p.bottomThickness + p.moatDepth + 1) * 60 / 36.8 : p.islandHeight + 8);
+  }
+  if (key === "moatDepth") {
+    limit.max = Math.min(limit.max, (p.referenceShape ? p.trayHeight * 36.8 / 60 : p.islandHeight) - p.bottomThickness - 1);
+  }
+  limit.min = Math.min(PARAM_LIMITS[key].max, ceilStep(limit.min, limit.step));
+  limit.max = Math.max(limit.min, floorStep(limit.max, limit.step));
+  return limit;
+}
+
+/** Shared by input, saved projects, preview and export; no printer bed size is assumed. */
+export function constrainParams(params: BowlParams): BowlParams {
+  const p = { ...params, icons: params.icons.map(icon => ({ ...icon })) };
+  for (const key of Object.keys(PARAM_LIMITS) as ParamKey[]) {
+    const value = Number.isFinite(p[key]) ? p[key] : DEFAULT_PARAMS[key];
+    p[key] = clampLimit(PARAM_LIMITS[key].step === 1 ? Math.round(value) : value, PARAM_LIMITS[key]);
+  }
+  p.ribCount = Math.round(p.ribCount);
+  p.insertMouthDiameter = Math.min(p.insertMouthDiameter, p.insertLipDiameter - 8);
+  p.insertBaseDiameter = Math.min(p.insertBaseDiameter, p.insertMouthDiameter - 4);
+  p.innerDepth = p.insertHeight;
+  p.bodyDiameter = Math.max(p.bodyDiameter, getParamLimits(p, "bodyDiameter").min);
+  p.height = Math.max(p.height, getParamLimits(p, "height").min);
+  p.trayDiameter = Math.max(p.trayDiameter, getParamLimits(p, "trayDiameter").min);
+  if (!p.referenceShape && p.moatEnabled) p.islandHeight = Math.max(p.islandHeight, ceilStep(p.bottomThickness + p.moatDepth + 1, 1));
+  p.trayHeight = Math.max(p.trayHeight, getParamLimits(p, "trayHeight").min);
+  for (const key of ["rimRadius", "embossDepth", "moatDepth"] as const) {
+    p[key] = clampLimit(p[key], getParamLimits(p, key));
+  }
+  for (const icon of p.icons) {
+    icon.sizeMm = clampLimit(Number.isFinite(icon.sizeMm) ? Math.round(icon.sizeMm) : 13, { min: 6, max: 22 });
+    icon.rotationDeg = clampLimit(Number.isFinite(icon.rotationDeg) ? icon.rotationDeg : 0, { min: -180, max: 180 });
+  }
+  return p;
 }
 
 export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlParams {
@@ -300,7 +374,7 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   }
   next.bodyDiameter = clampLimit(Math.max(next.bodyDiameter, minTopDiameter(next)), PARAM_LIMITS.bodyDiameter);
   next.trayDiameter = clampLimit(Math.max(next.trayDiameter, minTrayDiameter(next)), PARAM_LIMITS.trayDiameter);
-  return next;
+  return constrainParams(next);
 }
 
 type LegacyInsert = Omit<Partial<BowlParams>, "insertSize" | "icons"> & {

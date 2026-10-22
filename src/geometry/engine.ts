@@ -1,7 +1,7 @@
 import type { Manifold } from "manifold-3d";
 import type { Font } from "opentype.js";
 import type { BowlModel, BowlParams, BowlPart, MeshArrays, StabilityInfo } from "./types";
-import { DEFAULT_PARAMS } from "./types";
+import { DEFAULT_PARAMS, constrainParams } from "./types";
 import { layoutDecorations } from "./text";
 import { wrapPolygonsToCylinder } from "./wrap";
 import { getEngine, initEngine } from "./wasm";
@@ -58,9 +58,9 @@ export function resolvedDims(params: BowlParams) {
   const floorT = clamp(bottom, 2, 6);
   const moatGap = clamp(params.moatGap, 0.6, 24);
   const moatInner = params.referenceShape ? params.bodyDiameter / 2 * 0.772 + 3 * scale + moatGap : footR + fitClearance + moatGap;
-  const moatLimit = wallInner - 0.85;
+  const moatLimit = wallInner - (params.referenceShape ? 0.5 : 0.85);
   const moatOuter = Math.min(moatInner + clamp(params.moatWidth, 3, 24), moatLimit);
-  const moatDepth = clamp(params.moatDepth, 4, Math.max(4, deckZ - floorT - 1));
+  const moatDepth = clamp(params.moatDepth, 4, Math.max(4, params.referenceShape ? trayH * 36.8 / 60 - bottom - 1 : deckZ - floorT - 1));
   const moatOk = params.moatEnabled && moatOuter > moatInner + 1.4 && (params.referenceShape || moatInner > footR + 0.4) && moatInner < moatLimit - 1;
   const moatWidth = moatOk ? moatOuter - moatInner : 0;
   const winScale = bodyH / 102.9;
@@ -154,7 +154,11 @@ function revolve(profile: Array<[number, number]>, segments: number): Manifold {
 }
 
 function meshOf(solid: Manifold): MeshArrays {
-  const mesh = solid.getMesh();
+  // Boolean cuts can leave microscopic slivers at exact integer dimensions.
+  // Clean them before Float32 export, far below any manufacturing tolerance.
+  const cleaned = solid.simplify(0.0001);
+  const mesh = cleaned.getMesh();
+  cleaned.delete();
   const props = mesh.vertProperties;
   const stride = mesh.numProp;
   const weld = new Map<string, number>();
@@ -688,6 +692,7 @@ function stabilityOf(parts: BowlPart[], footprintR: number): StabilityInfo {
 }
 
 export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font | null = null): Promise<BowlModel> {
+  params = constrainParams(params);
   await initEngine();
   const p = resolvedDims(params);
 

@@ -43,7 +43,7 @@ export function textureSolid(solid: Manifold, params: BowlParams, name: "top"|"b
 
 // Entirely procedural solids. The supplied STL is only a dimensional reference.
 export async function referenceSolid(name: "top" | "base", scale: number, height: number, params: BowlParams): Promise<Manifold> {
-  const { CrossSection, Manifold } = getEngine();
+  const { CrossSection } = getEngine();
   const wall = Math.max(1.6, params.wallThickness);
   const bottom = Math.max(1.6, params.bottomThickness);
   const bodyR = params.bodyDiameter / 2;
@@ -59,10 +59,16 @@ export async function referenceSolid(name: "top" | "base", scale: number, height
   const peak = Math.max(lift + 4, rimZ + params.islandHeight);
   const supportR = Math.min(footHole + 3 * scale, trayR - wall - 4);
   const floorZ = Math.max(bottom + 1, rimZ - (params.moatEnabled ? params.moatDepth : 0));
+  const channelInner = supportR + params.moatGap;
+  const channelOuter = Math.min(channelInner + params.moatWidth, trayR - trayWall - 0.5);
+  const channel = params.moatEnabled && channelOuter > channelInner + 1;
+  // One continuous shoulder into the channel, without stacked circular ledges.
+  const basin: Array<[number, number]> = channel
+    ? [[supportR, lift], [channelInner, floorZ], [channelOuter, floorZ], [trayR - trayWall, rimZ]]
+    : [[supportR, lift], [trayR - trayWall, rimZ]];
   const profile: Array<[number, number]> = name === "base" ? [
     [0,peak], [Math.min(53.4*scale,footHole-4),peak],
-    [footHole-params.fitClearance,lift+lipH], [footHole-params.fitClearance,lift],
-    [supportR,lift], [supportR,rimZ],
+    [footHole-params.fitClearance,lift+lipH], ...basin,
     [trayR-fillet,rimZ], [trayR,rimZ-fillet],
     ...Array.from({length:32},(_,i)=>[trayR,rimZ-fillet-(rimZ-2*fillet)*(i+1)/32] as [number,number]),
     [trayR-fillet,0], [trayR-trayWall,0], [trayR-trayWall,floorZ-bottom], [0,floorZ-bottom],
@@ -80,17 +86,6 @@ export async function referenceSolid(name: "top" | "base", scale: number, height
   const section = new CrossSection([area < 0 ? profile.reverse() : profile]);
   let solid = section.revolve((params.baseTexture === "smooth" || name==="top") ? 192 : Math.max(256,Math.round(params.ribCount)*12));
   section.delete();
-  if (name === "base" && params.moatEnabled) {
-    const inner = supportR + params.moatGap;
-    const outer = Math.min(inner + params.moatWidth, trayR-trayWall-0.5);
-    if (outer > inner + 1) {
-      const outside = Manifold.cylinder(params.moatDepth+1,outer,outer,192).translate(0,0,rimZ-params.moatDepth);
-      const inside = Manifold.cylinder(params.moatDepth+2,inner,inner,192).translate(0,0,rimZ-params.moatDepth-0.5);
-      const channel = outside.subtract(inside);
-      const cut = solid.subtract(channel);
-      solid.delete(); outside.delete(); inside.delete(); channel.delete(); solid = cut;
-    }
-  }
   solid=textureSolid(solid,params,name);
   if (solid.status() !== "NoError" || solid.volume() <= 0) {
     solid.delete(); throw new Error("Không dựng được khối tròn kín");

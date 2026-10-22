@@ -108,7 +108,8 @@ describe("single bowl only", () => {
       bodyDiameter: 190,
       mouthShrink: 11,
     });
-    expect(kept.trayHeight).toBe(22);
+    // The old 22 mm proportion cannot contain an 18 mm channel plus its floor.
+    expect(kept.trayHeight).toBe(35);
     expect(kept.islandHeight).toBe(40);
     expect(kept.moatGap).toBe(8);
   });
@@ -140,10 +141,11 @@ describe("stainless insert sizes", () => {
     expect(pSmall.openR * 2).toBeCloseTo(146.6, 1);
     expect(pSmall.flangeR * 2).toBeCloseTo(130.4, 0);
     expect(pSmall.wall).toBeCloseTo(3, 4);
-    expect(pSmall.bodyH).toBeCloseTo(102.9, 4);
-    expect(pSmall.trayR * 2).toBeCloseTo(190, 4);
+    expect(pSmall.bodyH).toBe(103);
+    // The legacy foot is wider: allow the full 14 mm moat instead of silently clipping it.
+    expect(pSmall.trayR * 2).toBeCloseTo(209, 4);
     expect(pSmall.trayH).toBeCloseTo(60, 4);
-    expect(pSmall.deckZ).toBeCloseTo(25.7, 4);
+    expect(pSmall.deckZ).toBe(26);
     expect(pSmall.trayR * 2).toBeGreaterThanOrEqual(minTrayDiameter(sizedSmall) - 0.01);
     expect(minHolderDiameter(sizedSmall)).toBeCloseTo(130 + 2 * sizedSmall.wallThickness + 2 * sizedSmall.insertClearance, 4);
 
@@ -153,11 +155,11 @@ describe("stainless insert sizes", () => {
     expect(pLarge.mouthInner).toBe(160);
     expect(pLarge.baseR * 2).toBe(95);
     expect(pLarge.insertHeight).toBe(55);
-    expect(sizedLarge.bodyDiameter).toBeCloseTo(190 * (190 / 130), 1);
+    expect(sizedLarge.bodyDiameter).toBe(Math.round(190 * (190 / 130)));
     expect(pLarge.topR * 2).toBeCloseTo(sizedLarge.bodyDiameter, 4);
     expect(pLarge.openR * 2).toBeCloseTo(146.6 * (190 / 130), 0);
     expect(pLarge.footR).toBeLessThan(pLarge.topR);
-    expect(sizedLarge.trayHeight).toBeCloseTo(60 * (190 / 130), 1);
+    expect(sizedLarge.trayHeight).toBe(Math.round(60 * (190 / 130)));
 
     const manual = applyInsertSize({ ...DEFAULT_PARAMS, linkBodyToInsert: false, bodyDiameter: 210, height: 110 }, "small");
     expect(manual.linkBodyToInsert).toBe(false);
@@ -220,7 +222,7 @@ describe("stainless insert sizes", () => {
 
 describe("tray moat and centering fit", () => {
   it("cuts the water channel into the base instead of exporting a fourth filament part", async () => {
-    const params = { ...PRESETS.find((p) => p.id === "cat-care")!.params, referenceShape: false };
+    const params = normalizeParams({ ...PRESETS.find((p) => p.id === "cat-care")!.params, referenceShape: false });
     const model = await buildBowl(params, font);
     expect(model.moatEnabled).toBe(true);
     expect(model.moatWaterMl).toBeGreaterThan(20);
@@ -268,7 +270,7 @@ describe("tray moat and centering fit", () => {
     const ring = radiiNear(base.mesh.positions, p.deckZ, 1.2);
     expect(ring.some((r) => Math.abs(r - p.moatInner) < 2.2)).toBe(true);
     expect(ring.some((r) => Math.abs(r - p.moatOuter) < 2.2)).toBe(true);
-    const dome = sliceMaxRadius(base.mesh.positions, base.mesh.indices, 8);
+    const dome = sliceMaxRadius(base.mesh.positions, base.mesh.indices, p.deckZ - p.moatDepth + 0.5);
     expect(dome).toBeGreaterThan(45);
     expect(dome).toBeLessThan(p.trayR - 8);
   });
@@ -566,4 +568,25 @@ it("rounds the upper rim continuously and keeps the zero-radius option printable
     const variant=await buildBowl({...params,rimRadius});
     for(const part of variant.parts) expect(isPrintableManifold(part.mesh),part.name).toBe(true);
   }
+});
+
+
+it("keeps a deep water channel without stacked support ledges", async () => {
+  const params = {...REFERENCE_DEFAULTS, text:"", textLine2:"", icons:[], tiltDeg:0};
+  const model = await buildBowl(params);
+  const base = model.parts.find(part => part.name === "base")!;
+  const rimZ = params.trayHeight * 36.8 / 60;
+  const supportR = Math.min(params.bodyDiameter / 2 * 0.772 + 3, params.trayDiameter / 2 - params.wallThickness - 4);
+  const floorZ = rimZ - params.moatDepth;
+  const vertices = base.mesh.positions;
+  let floorVertices = 0;
+  for (let i = 0; i < vertices.length; i += 3) {
+    const r = Math.hypot(vertices[i], vertices[i+1]);
+    const z = vertices[i+2];
+    if (r > supportR + 1 && Math.abs(z-floorZ) < 0.001) floorVertices++;
+    expect(r > supportR-0.01 && r < supportR+0.01 && Math.abs(z-rimZ) < 0.001).toBe(false);
+  }
+  expect(floorVertices).toBeGreaterThan(100);
+  expect(model.moatDepth).toBe(18);
+  expect(isPrintableManifold(base.mesh)).toBe(true);
 });

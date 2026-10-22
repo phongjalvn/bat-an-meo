@@ -1,3 +1,4 @@
+import { constrainParams } from "../geometry/types";
 import type { BowlModel, BowlParams, MeshArrays } from "../geometry/types";
 
 function polyhedron(mesh: MeshArrays | undefined): string {
@@ -9,6 +10,7 @@ function polyhedron(mesh: MeshArrays | undefined): string {
 
 /** Editable CAD solids; decoration outlines come from the selected font, not an imported STL. */
 export function modelToScad(params: BowlParams, model: BowlModel): string {
+  params = constrainParams(params);
   const number = (n: number) => Number(n.toFixed(5));
   return `// MONO - OpenSCAD parametric pet bowl. Millimetres.
 // Original geometry, no imported STL or source logo.
@@ -52,6 +54,11 @@ lift = rz+6*s+clearance;
 peak = max(lift+4,rz+stand_h);
 support = min(fh+3*s,tr-wall-4);
 floor_z = max(bottom+1,rz-(moat ? moat_depth : 0));
+channel_inner = support+moat_gap;
+channel_outer = min(channel_inner+moat_width,tr-tray_wall-0.5);
+channel = moat && channel_outer>channel_inner+1;
+basin = channel ? [[support,lift],[channel_inner,floor_z],[channel_outer,floor_z],[tr-tray_wall,rz]]
+ : [[support,lift],[tr-tray_wall,rz]];
 slope = (mr-br)/max(1,body_h-f);
 inner_round = min(0.6,lh*0.2,f);
 outer_arc = [for(i=[0:16]) let(t=i/16,u=1-t)
@@ -61,8 +68,7 @@ inner_arc = [for(i=[0:8]) let(t=i/8,u=1-t)
 wall_points=[for(i=[1:64]) let(z=f+(body_h-2*f)*i/64) [br+slope*(z-f),z]];
 body_profile = concat([[fh,0],[br-f,0],[br,f]],wall_points,outer_arc,inner_arc,
  [[seat,body_h-lh],[mr-wall,body_h-lh],[br-wall,lh],[fh,lh]]);
-base_profile = concat([[0,peak],[min(53.4*s,fh-4),peak],[fh-clearance,lift+lh],
- [fh-clearance,lift],[support,lift],[support,rz],[tr-f,rz],[tr,rz-f]],
+base_profile = concat([[0,peak],[min(53.4*s,fh-4),peak],[fh-clearance,lift+lh]],basin,[[tr-f,rz],[tr,rz-f]],
  [for(i=[1:32]) [tr,rz-f-(rz-2*f)*i/32]],
  [[tr-f,0],[tr-tray_wall,0],[tr-tray_wall,floor_z-bottom],[0,floor_z-bottom]]);
 function blend(z) = let(t=min(1,max(0,(z*102.8571395874/body_h-38)/(100.1-38)))) t*t*(3-2*t);
@@ -91,14 +97,9 @@ module body() { difference() {
   scale([1,1.8,1]) cylinder(h=220*s,r=7.5*s,center=true,$fn=64);
  if(engrave) decoration();
 } }
-module base() { difference() {
+module base() {
  sweep([for(i=[len(base_profile)-1:-1:0]) base_profile[i]],false);
- if(moat && min(support+moat_gap+moat_width,tr-tray_wall-0.5)>support+moat_gap+1)
- translate([0,0,rz-moat_depth]) difference() {
-  cylinder(h=moat_depth+1,r=min(support+moat_gap+moat_width,tr-tray_wall-0.5));
-  translate([0,0,-0.5]) cylinder(h=moat_depth+2,r=support+moat_gap);
- }
-} }
+}
 if(part=="assembly" || part=="body") color("Ivory") body();
 if(part=="assembly" || part=="base") color("Peru") base();
 if(part=="assembly" || part=="text") color("SaddleBrown") decoration();

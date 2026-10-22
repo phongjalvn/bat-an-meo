@@ -51,3 +51,35 @@ describe("OpenSCAD render",()=>{
     }
   },120000);
 });
+
+
+it("exports conflicting minimum dimensions as closed OpenSCAD solids", async () => {
+  await initEngine();
+  const params = { ...DEFAULT_PARAMS, insertSize: "custom" as const, linkBodyToInsert: false,
+    insertLipDiameter: 90, insertMouthDiameter: 220, insertBaseDiameter: 180,
+    bodyDiameter: 90, height: 40, wallThickness: 1.6, bottomThickness: 1.6,
+    mouthShrink: 40, trayDiameter: 110, trayHeight: 16, moatWidth: 20,
+    moatGap: 24, moatDepth: 22, text: "", textLine2: "", icons: [] };
+  const preview = await buildBowl(params);
+  const source = modelToScad(params, preview);
+  const logs: string[] = [];
+  for (const part of ["body", "base"]) {
+    const app = await createOpenSCAD({ print: line => logs.push(line), printErr: line => logs.push(line) });
+    const instance = app.getInstance();
+    instance.FS.writeFile("/limits.scad", source);
+    const code = instance.callMain(["/limits.scad", "--backend=Manifold", "-D", `part="${part}"`, "-o", "/limits.stl"]);
+    expect(code, logs.join("\n")).toBe(0);
+    const bytes = instance.FS.readFile("/limits.stl", { encoding: "binary" });
+    const geometry = new STLLoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    const positions = Float32Array.from(geometry.getAttribute("position").array);
+    const { Manifold, Mesh } = getEngine();
+    const mesh = new Mesh({ numProp: 3, vertProperties: positions,
+      triVerts: Uint32Array.from({ length: positions.length / 3 }, (_, i) => i) });
+    mesh.merge();
+    const solid = new Manifold(mesh);
+    expect(solid.status(), part).toBe("NoError");
+    expect(solid.volume(), part).toBeGreaterThan(1000);
+    solid.delete();
+    geometry.dispose();
+  }
+}, 120000);
