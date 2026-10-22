@@ -46,7 +46,9 @@ export function wrapPolygonsToCylinder(
     cs.delete();
     return null;
   }
-  const extruded = cs.extrude(thickness);
+  const raw = cs.extrude(thickness);
+  const extruded = raw.refineToLength(1.5);
+  raw.delete();
   cs.delete();
   const mesh = extruded.getMesh();
   const stride = mesh.numProp;

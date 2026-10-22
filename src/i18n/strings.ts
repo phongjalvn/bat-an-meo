@@ -43,7 +43,7 @@ export const STR = {
     insertBaseDiameter: "Đường kính đáy",
     insertHeight: "Chiều cao bát",
     insertClearance: "Khe hở lắp inox",
-    insertHint: "Bát inox nằm trong gờ miệng phía trên. Lỗ gờ theo mẫu (Nhỏ Ø146.6). Chỉ xem trước, không xuất in.",
+    insertHint: "Bát inox nằm trong gờ miệng phía trên. Gờ đỡ vừa miệng bát, giữ vành inox phía trên. Chỉ xem trước, không xuất in.",
     moatEnabled: "Hào nước chống kiến trong khay",
     moatWidth: "Rộng hào nước",
     moatDepth: "Sâu hào nước",

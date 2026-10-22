@@ -85,7 +85,10 @@ function flipY(poly: Point[]): Point[] {
 export function fontPolygons(font: Font, text: string, fontSize: number): Point[][] {
   const path = font.getPath(text, 0, 0, fontSize);
   const contours = commandPoints(path.commands).map(flipY).filter((c) => c.length >= 3);
-  return contours.map((c) => (area(c) < 0 ? [...c].reverse() : c));
+  // Reverse the entire glyph winding together. Reversing each contour
+  // independently fills the counters in B, o, 0 and Vietnamese letters.
+  const largest = contours.reduce<Point[] | null>((best, c) => !best || Math.abs(area(c)) > Math.abs(area(best)) ? c : best, null);
+  return largest && area(largest) < 0 ? contours.map(c => [...c].reverse()) : contours;
 }
 
 function centerPolygons(polygons: Polygon[]): Polygon[] {

@@ -52,6 +52,8 @@ export function cloneIcons(icons: IconSlot[] | undefined): IconSlot[] {
 }
 
 export interface BowlParams {
+  /** Preserve the supplied two-piece STL geometry. */
+  referenceShape: boolean;
   /** Outer diameter at the top of the upward frustum. */
   bodyDiameter: number;
   /** When true, top, flare, height, tray, and deck follow the insert lip. */
@@ -123,6 +125,7 @@ export const PARAM_LIMITS = {
 } as const;
 
 export const DEFAULT_PARAMS: BowlParams = {
+  referenceShape: true,
   bodyDiameter: 190,
   linkBodyToInsert: true,
   rimMargin: 10,
@@ -343,6 +346,7 @@ export function normalizeParams(raw: LegacyInsert | undefined): BowlParams {
       : DEFAULT_PARAMS.insertSize;
   const merged: BowlParams = {
     ...DEFAULT_PARAMS,
+    referenceShape: incoming.referenceShape ?? true,
     bodyDiameter: incoming.bodyDiameter ?? DEFAULT_PARAMS.bodyDiameter,
     linkBodyToInsert: incoming.linkBodyToInsert ?? true,
     rimMargin: incoming.rimMargin ?? DEFAULT_PARAMS.rimMargin,

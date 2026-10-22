@@ -5,6 +5,7 @@ import { DEFAULT_PARAMS } from "./types";
 import { layoutDecorations } from "./text";
 import { wrapPolygonsToCylinder } from "./wrap";
 import { getEngine, initEngine } from "./wasm";
+import { referenceSolid, tiltReference } from "./reference";
 
 export { getEngine, initEngine };
 
@@ -638,15 +639,17 @@ function buildDecor(
   if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
   const depth = clamp(params.embossDepth, 0.4, 4);
   const zMid = p.deckLift + p.wrapLocal;
+  const slope = params.referenceShape ? 0.1 * (p.topR / 95) * 102.85713958740234 / p.bodyH : p.slope;
+  const radius = params.referenceShape ? 84.914 * p.topR / 95 + slope * p.wrapLocal : p.wrapR;
   const engrave = params.textStyle !== "emboss";
-  const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, p.wrapR, depth + 0.45, zMid, 0.08, p.slope) : null;
+  const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, radius, depth + 0.45, zMid, depth, slope) : null;
   const inlay = wrapPolygonsToCylinder(
     layout.polygons,
-    p.wrapR,
+    radius,
     depth + (engrave ? 0.05 : 0.15),
     zMid,
-    engrave ? 0.02 : 0.35,
-    p.slope,
+    engrave ? depth - 0.08 : 0.35,
+    slope,
   );
   return { cutter, inlay, warnings: layout.warnings };
 }
@@ -686,7 +689,26 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
   await initEngine();
   const p = resolvedDims(params);
 
-  let body = buildBody(p, params.windowEnabled !== false);
+  let body: Manifold;
+  if (params.referenceShape) {
+    const source = await referenceSolid("top", p.topR / 95, p.bodyH);
+    body = source.translate(0, 0, p.deckLift);
+    source.delete();
+  } else {
+    body = buildBody(p, params.windowEnabled !== false);
+  }
+  if (params.referenceShape) {
+    // The reference opening is wider than a 130 mm steel lip: bridge inward
+    // with a tilted seat, while keeping the outer shell and foot unchanged.
+    const seatInner = p.mouthOuterR + p.clearance;
+    const seat = ringCyl(p.lipH + 1, seatInner, 75.5 * p.topR / 95, -p.lipH);
+    const tilted = seat.translate(0, 0, p.bodyH);
+    seat.delete();
+    const placed = tilted.translate(0, 0, p.deckLift);
+    tilted.delete();
+    const joined = body.add(placed);
+    body.delete(); placed.delete(); body = joined;
+  }
   const decor = buildDecor(params, p, font);
   if (decor.cutter) {
     try {
@@ -702,7 +724,12 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
   let text: Manifold | null = null;
   if (decor.inlay) text = decor.inlay;
 
-  const tray = buildTray(params, p);
+  if (params.referenceShape) {
+    body = tiltReference(body, p.topR / 95, p.bodyH, p.deckLift, p.tilt);
+    if (text) text = tiltReference(text, p.topR / 95, p.bodyH, p.deckLift, p.tilt);
+  }
+
+  const tray = params.referenceShape ? await referenceSolid("base", p.trayR / 95, p.trayH) : buildTray(params, p);
   const insert = buildInsert(p);
 
   const capR = p.mouthInner / 2;

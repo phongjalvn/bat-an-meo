@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BowlModel, PartName } from "../geometry/types";
 import { PART_COLORS } from "../geometry/types";
@@ -71,7 +72,7 @@ export class BowlViewer {
     if (view === "front") this.camera.position.set(0, h * 0.48, Math.max(w, h) * 2.05);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
     else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.05, h * 0.48, 0);
-    else this.camera.position.set(w * 0.78, h * 0.58, w * 1.72);
+    else this.camera.position.set(w * 0.78, h * 1.15, w * 2.6);
     this.controls.target.set(0, h * 0.42, 0);
     this.controls.update();
   }
@@ -87,8 +88,9 @@ export class BowlViewer {
     this.dimGroup.clear();
     const lift = -0;
     for (const part of model.parts) {
-      const geom = toGeometry(part.mesh.positions, part.mesh.indices);
-      geom.computeVertexNormals();
+      const raw = toGeometry(part.mesh.positions, part.mesh.indices);
+      const geom = toCreasedNormals(raw, Math.PI / 5);
+      raw.dispose();
       const color = colorOf(part.name);
       const mat = new THREE.MeshStandardMaterial({
         color,

@@ -181,24 +181,23 @@ export class App {
           <div class="hint">${L("insertHint")}</div>
         </div>
         ${custom ? CUSTOM_INSERT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""}
-        ${SIZE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("")}
+        ${(this.params.referenceShape ? [] : SIZE_KEYS).map((key) => this.slider(key, L(labelFor(key)))).join("")}
       `,
       )}
       ${section(
         "structure",
         L("structure"),
         this.open.structure,
-        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
-          this.toggle("antiSlipGroove", L("antiSlip")) +
-          this.toggle("windowEnabled", L("window")),
+        (this.params.referenceShape ? [] : STRUCT_KEYS).map((key) => this.slider(key, L(labelFor(key)))).join("") +
+          (this.params.referenceShape ? `<div class="hint">Giữ nguyên vỏ, chân lắp, cửa thoáng và khay nước từ STL mẫu. Chỉ phần trên nghiêng theo góc đã chọn.</div>` : this.toggle("antiSlipGroove", L("antiSlip")) + this.toggle("windowEnabled", L("window"))),
       )}
       ${section(
         "catCare",
         L("catCare"),
         this.open.catCare,
         CATCARE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
-          this.toggle("moatEnabled", L("moatEnabled")) +
-          (this.params.moatEnabled ? MOAT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""),
+          (this.params.referenceShape ? `<div class="hint">Khay chống kiến dùng nguyên lòng khay STL mẫu. Đổ nước quanh chân đỡ, giữ mực nước dưới cửa thoáng.</div>` : this.toggle("moatEnabled", L("moatEnabled"))) +
+          (!this.params.referenceShape && this.params.moatEnabled ? MOAT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""),
       )}
       ${section(
         "personalize",
@@ -230,7 +229,7 @@ export class App {
         ${this.iconEditors()}
       `,
       )}
-      ${section(
+      ${!this.params.referenceShape ? section(
         "texture",
         L("baseTexture"),
         this.open.texture,
@@ -240,7 +239,7 @@ export class App {
         </div>
         ${this.slider("ribCount", L("ribCount"))}
       `,
-      )}
+      ) : ""}
     `;
   }
 

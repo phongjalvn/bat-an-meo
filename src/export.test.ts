@@ -3,13 +3,18 @@ import { resolve } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import JSZip from "jszip";
 import { parse } from "opentype.js";
-import { DEFAULT_PARAMS, applyInsertSize, minHolderDiameter, minTrayDiameter, normalizeParams } from "./geometry/types";
+import { DEFAULT_PARAMS as REFERENCE_DEFAULTS, applyInsertSize, minHolderDiameter, minTrayDiameter, normalizeParams } from "./geometry/types";
 import { buildBowl, initEngine, resolvedDims } from "./geometry/engine";
 import { isPrintableManifold } from "./geometry/manifold-check";
 import { isClosedPrintable, pathToPolygons, svgTextToPolygons } from "./geometry/icons";
 import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { REQUIRED_3MF_FILES, buildThreeMf } from "./export/threemf";
+import { fontPolygons } from "./geometry/text";
+import { getEngine } from "./geometry/wasm";
 import { PRESETS } from "./presets";
+
+// Retain coverage of the optional parametric editor independently of the STL mode.
+const DEFAULT_PARAMS = { ...REFERENCE_DEFAULTS, referenceShape: false };
 
 const fontBytes = readFileSync(resolve("public/fonts/NotoSans-Regular.ttf"));
 const font = parse(fontBytes.buffer.slice(fontBytes.byteOffset, fontBytes.byteOffset + fontBytes.byteLength));
@@ -215,7 +220,7 @@ describe("stainless insert sizes", () => {
 
 describe("tray moat and centering fit", () => {
   it("cuts the water channel into the base instead of exporting a fourth filament part", async () => {
-    const params = PRESETS.find((p) => p.id === "cat-care")!.params;
+    const params = { ...PRESETS.find((p) => p.id === "cat-care")!.params, referenceShape: false };
     const model = await buildBowl(params, font);
     expect(model.moatEnabled).toBe(true);
     expect(model.moatWaterMl).toBeGreaterThan(20);
@@ -483,3 +488,42 @@ async function assertThreeMf(
   expect(objectModel).toContain("<triangle");
   expect((objectModel.match(/<object /g) ?? []).length).toBeGreaterThanOrEqual(expectMeta.minObjects);
 }
+
+
+describe("supplied STL product", () => {
+  it("keeps the reference tray volume and produces closed personalized parts at both tilt limits", async () => {
+    for (const tiltDeg of [0, 15]) {
+      const model = await buildBowl({ ...REFERENCE_DEFAULTS, tiltDeg, text: "Bầu", textLine2: "" }, font);
+      expect(model.manifold).toBe(true);
+      const base = model.parts.find(p => p.name === "base")!;
+      expect(base.volumeMm3).toBeCloseTo(493314.87, 0);
+      expect(model.width).toBeCloseTo(190, 0);
+      for (const part of model.parts) expect(isPrintableManifold(part.mesh), part.name).toBe(true);
+      // The opening seat must stop a 130 mm steel lip, while clearing its 111.4 mm outer mouth.
+      const body = model.parts.find(p => p.name === "body")!;
+      if (tiltDeg === 0) {
+        const radii = sliceRadii(body.mesh.positions, body.mesh.indices, REFERENCE_DEFAULTS.islandHeight + REFERENCE_DEFAULTS.height - 1);
+        expect(radii.some(r => r > 55.7 && r < 56.5)).toBe(true);
+      }
+      const bytes = modelToBinaryStl(model);
+      expect(new DataView(bytes.buffer).getUint32(80, true)).toBe(model.triangleCount);
+    }
+  });
+  it("scales the source for the large insert without opening mesh boundaries", async () => {
+    const model = await buildBowl(applyInsertSize({ ...REFERENCE_DEFAULTS, text: "Jimmy", textLine2: "", textStyle: "emboss" }, "large"), font);
+    expect(model.manifold).toBe(true);
+    for (const part of model.parts) expect(isPrintableManifold(part.mesh), part.name).toBe(true);
+    const mf = await buildThreeMf(model, "bambu");
+    expect(mf.bytes.length).toBeGreaterThan(1000);
+  });
+});
+
+it("preserves the counter inside a round name glyph", () => {
+  const polygons = fontPolygons(font, "O", 26);
+  const area = (poly: number[][]) => Math.abs(poly.reduce((sum, p, i) => { const q = poly[(i + 1) % poly.length]; return sum + p[0]*q[1]-q[0]*p[1]; }, 0) / 2);
+  const largest = Math.max(...polygons.map(area));
+  const section = new (getEngine().CrossSection)(polygons);
+  expect(section.area()).toBeGreaterThan(0);
+  expect(section.area()).toBeLessThan(largest * 0.8);
+  section.delete();
+});

@@ -2,19 +2,29 @@
 
 Vietnamese-first web app that designs a 3D-printable pet bowl and exports slicer-ready files.
 
-The body is a straight frustum that widens upward, matching the reference shell: about Ø168 at the foot and Ø190 at the top for the Small insert, a constant 3 mm wall, and a height of 102.9 mm on the low side. The top is cut at 0–15° (low at the front, about 13–15° for cats) and finished with one continuous radial fillet. The stainless insert hangs in a top ring lip (Ø146.6 opening for Small) — there is no deep internal shelf. The bottom is open, with a thin inward foot flange. An optional oval window cuts the front wall near the foot. The tray follows the reference dish: Ø190, a 60 mm wall about 3 mm thick, a solid domed underside, and a flat deck near z = 26 mm that the body sits on. A water moat is cut into that deck between the foot and the tray wall, and a low rib locates the foot. Every major diameter and height scales with the insert lip (Small 130, Large 190, or Custom). Geometry is generated with lathe profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
+Mặc định app dùng trực tiếp hình học từ hai STL mẫu `obj_1_base.stl` và `obj_2_top.stl`. Khay nước, chân lắp, cửa thoáng và bo cạnh giữ theo mẫu; chỉ phần trên của thân được nâng dần để tạo miệng nghiêng 0–15°. Tên, dòng phụ và icon bám theo mặt thân, có thể khắc chìm hoặc làm nổi, xuất riêng màu trong 3MF.
+
+Lỗ nguyên mẫu khoảng Ø146,6 mm lớn hơn vành bát inox nhỏ Ø130 mm. App bổ sung vòng đỡ bên trong, mở theo đường kính miệng ngoài cộng độ hở, để vành inox tựa được trên thân. Bát inox chỉ dùng để xem trước. Chưa có kiểm chứng bằng bản in và bát inox thật.
+
+Mesh nguồn được hàn đỉnh và giảm tam giác với sai số 0,04 mm, lưu trong `public/reference/*.bin` (tọa độ mm, tâm XY ở gốc). Tái tạo asset từ STL gốc bằng:
+
+```bash
+node scripts/prepare-reference.mjs "/path/to/base_elevatorio_anti_insects_stls"
+```
+
+Giao diện mặc định chỉ đưa ra các thông số phù hợp với mẫu: kích thước bát inox, góc nghiêng và cá nhân hóa. Các dự án cũ tự chuyển sang hình học STL mẫu; engine dựng tham số cũ vẫn được giữ với `referenceShape: false` để tương thích và kiểm thử. Kích thước Small/Large vẫn là tỷ lệ cấu hình của app; cần đo bát inox thực tế và dùng Custom trước khi in.
 
 ## Features
 
 - Live 3D preview with orbit, front/top/side cameras, zoom, and a reference plate that is not exported
 - Stainless insert sizes from the real bowls: **Nhỏ 11 cm** (lip 130 / mouth 110 / base 70 / height 40 mm) and **Lớn 16 cm** (lip 190 / mouth 160 / base 95 / height 55 mm), plus Custom for those four measurements
-- Top lip opening follows the reference (Ø146.6 for a 130 mm insert lip) and scales with the selected insert. The steel mesh is preview-only
+- The reference shell opening gains an inward seat sized to the measured steel mouth plus clearance. The steel mesh is preview-only
 - Single bowl only. Saved projects that still carry a double-bowl flag load as one bowl (that field is ignored)
-- Design sliders for top diameter, upward flare, body height, tray size, deck height, wall thickness, rounded rim, 0–15° cat tilt, foot clearance, and the oval window
-- Anti-hunch tilted top and an anti-ant water moat in the deck between the body foot and the tray wall
+- Reference geometry with 0–15° tilt and steel insert sizing; unrelated structural controls are hidden
+- Tilted top and the original water tray around the raised body foot
 - Name plus optional date line, wrapped on the front: large name, icon beside it, small date underneath; engraved inlay or flush emboss
 - Customizable icons (paw, cat, dog, heart, fish, bone, star) or uploaded SVG / PNG; per-icon placement, size, and rotation
-- Base textures: smooth, vertical ribs, twisted ribs
+- Original STL tray and mating foot
 - Presets: small cat, medium dog, large dog, cat anti-hunch / anti-ant
 - Local project save (`Đã lưu trên máy`)
 - Estimated capacity (ml) and print mass (g) for PLA / PETG / ABS
