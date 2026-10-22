@@ -542,9 +542,28 @@ it("applies thickness, stand height and both base textures to real solids", asyn
   const thick=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],wallThickness:4,bottomThickness:4,islandHeight:35});
   expect(thick.parts.find(p=>p.name==="base")!.volumeMm3).toBeGreaterThan(base.volumeMm3);
   for(const baseTexture of ["ribs","twist"] as const){
-    const textured=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],baseTexture,ribCount:24});
+    const textured=await buildBowl({...REFERENCE_DEFAULTS,text:"",textLine2:"",icons:[],tiltDeg:0,baseTexture,ribCount:24});
     const part=textured.parts.find(p=>p.name==="base")!;
-    expect(part.volumeMm3).toBeLessThan(base.volumeMm3);
-    expect(isPrintableManifold(part.mesh)).toBe(true);
+    expect(part.volumeMm3).toBeGreaterThan(base.volumeMm3);
+    const body=textured.parts.find(p=>p.name==="body")!;
+    expect(body.volumeMm3).toBeCloseTo(plain.parts.find(p=>p.name==="body")!.volumeMm3,0);
+    for(const solid of textured.parts) expect(isPrintableManifold(solid.mesh),solid.name).toBe(true);
+  }
+});
+
+it("rounds the upper rim continuously and keeps the zero-radius option printable", async()=>{
+  const params={...REFERENCE_DEFAULTS,tiltDeg:0,text:"",textLine2:"",icons:[],windowEnabled:false,rimRadius:2.2};
+  const model=await buildBowl(params);
+  const body=model.parts.find(p=>p.name==="body")!;
+  const z=resolvedDims(params).deckLift+params.height;
+  const outer=(drop:number)=>Math.max(...sliceRadii(body.mesh.positions,body.mesh.indices,z-drop));
+  const upperChange=outer(0.8)-outer(0.3);
+  const lowerChange=outer(1.8)-outer(1.3);
+  // A straight chamfer has constant slope. A rounded transition turns
+  // progressively toward the horizontal face as it approaches the top.
+  expect(upperChange).toBeGreaterThan(lowerChange*1.5);
+  for(const rimRadius of [0,10]){
+    const variant=await buildBowl({...params,rimRadius});
+    for(const part of variant.parts) expect(isPrintableManifold(part.mesh),part.name).toBe(true);
   }
 });

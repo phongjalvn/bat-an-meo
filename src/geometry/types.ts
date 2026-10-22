@@ -140,7 +140,7 @@ export const DEFAULT_PARAMS: BowlParams = {
   rimRadius: 2.2,
   tiltDeg: 15,
   moatEnabled: true,
-  moatWidth: 4.5,
+  moatWidth: 14,
   moatDepth: 10,
   moatGap: 2,
   fitClearance: 0.45,

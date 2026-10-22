@@ -54,7 +54,7 @@ export function resolvedDims(params: BowlParams) {
   const trayH = clamp(params.trayHeight, 16, 130);
   const deckZ = clamp(params.islandHeight, 8, Math.max(10, trayH - 8));
   const deckLift = params.referenceShape ? trayH * 36.8 / 60 + 6 * scale + fitClearance : deckZ + 0.2;
-  const wallInner = trayR - wall;
+  const wallInner = trayR - (params.referenceShape ? Math.max(1.6,Math.min(2.4,wall*2/3)) : wall);
   const floorT = clamp(bottom, 2, 6);
   const moatGap = clamp(params.moatGap, 0.6, 24);
   const moatInner = params.referenceShape ? params.bodyDiameter / 2 * 0.772 + 3 * scale + moatGap : footR + fitClearance + moatGap;
@@ -639,8 +639,10 @@ function buildDecor(
   if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
   const depth = clamp(params.embossDepth, 0.4, 4);
   const zMid = p.deckLift + p.wrapLocal;
-  const slope = params.referenceShape ? (Math.max(p.lipR + p.wall + 1, params.bodyDiameter / 2 - params.mouthShrink) - params.bodyDiameter / 2) / p.bodyH : p.slope;
-  const radius = params.referenceShape ? params.bodyDiameter / 2 + slope * p.wrapLocal : p.wrapR;
+  const mouthR = Math.max(p.lipR + p.wall + 1, params.bodyDiameter / 2 - params.mouthShrink);
+  const fillet = Math.min(params.rimRadius, p.wall, (mouthR-p.mouthOuterR-p.clearance)/3);
+  const slope = params.referenceShape ? (mouthR-params.bodyDiameter/2)/Math.max(1,p.bodyH-fillet) : p.slope;
+  const radius = params.referenceShape ? params.bodyDiameter/2 + slope*(p.wrapLocal-fillet) : p.wrapR;
   const engrave = params.textStyle !== "emboss";
   const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, radius, depth + 0.45, zMid, depth, slope) : null;
   const inlay = wrapPolygonsToCylinder(
@@ -694,14 +696,7 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
     const source = await referenceSolid("top", p.scale, p.bodyH, params);
     body = source.translate(0, 0, p.deckLift);
     source.delete();
-    if (params.windowEnabled !== false) {
-      const { Manifold } = getEngine();
-      // Two finger openings under the rim, on the sides, clear of the name.
-      const hole = Manifold.cylinder(220 * p.scale, 7.5 * p.scale, 7.5 * p.scale, 64, true)
-        .scale([1.8, 1, 1]).rotate(0, 90, 0).translate(0, 0, p.deckLift + p.bodyH * 0.77);
-      const opened = body.subtract(hole);
-      body.delete(); hole.delete(); body = opened;
-    }
+
   } else {
     body = buildBody(p, params.windowEnabled !== false);
   }
@@ -723,6 +718,14 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
   if (params.referenceShape) {
     body = tiltReference(body, p.bodyH, p.deckLift, p.tilt);
     if (text) text = tiltReference(text, p.bodyH, p.deckLift, p.tilt);
+    if (params.windowEnabled !== false) {
+      const { Manifold } = getEngine();
+      // Two finger openings under the rim, on the sides, clear of the name.
+      const hole = Manifold.cylinder(220 * p.scale, 7.5 * p.scale, 7.5 * p.scale, 64, true)
+        .scale([1, 1.8, 1]).rotate(0, 90, 0).translate(0, 0, p.deckLift + p.bodyH * 0.77);
+      const opened = body.subtract(hole);
+      body.delete(); hole.delete(); body = opened;
+    }
   }
 
   const tray = params.referenceShape ? await referenceSolid("base", p.scale, p.trayH, params) : buildTray(params, p);

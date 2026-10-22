@@ -7,12 +7,12 @@ App tiếng Việt dựng bát tham số, xuất OpenSCAD, STL và project 3MF c
 Toàn bộ hình học được dựng mới bằng tiết diện và phép CSG. STL được cung cấp chỉ là tài liệu tham khảo về tỷ lệ; app không tải, nhúng hay nhập mesh gốc, không mang theo logo của mẫu.
 
 - Thân rộng phía dưới, thu nhỏ ở miệng. Chân đế phẳng phía dưới, bệ đỡ nhô lên vào trong thân.
-- Miệng nghiêng 0–15°; chân lắp giữ nguyên để đặt thẳng trên đế.
-- Hai cửa lấy tay ở hai bên, gần miệng; tên ở mặt trước.
+- Miệng nghiêng 0–15°, bo cong tiếp tuyến ở mép ngoài và làm mềm cạnh trong; chân lắp giữ nguyên để đặt thẳng trên đế.
+- Hai cửa lấy tay oval nằm ngang ở hai bên, gần miệng; tên ở mặt trước.
 - Gờ miệng đỡ vành inox, lỗ mở theo miệng ngoài cộng độ hở. Bát inox chỉ xem trước.
 - Thành, đáy, độ thu miệng, chiều cao chân đỡ và kích thước đều điều chỉnh được.
-- Hào nước có tùy chọn bật/tắt, chiều rộng, chiều sâu và khe hở.
-- Đế trơn, gân dọc hoặc gân xoắn, thay đổi được số gân.
+- Hào nước mặc định rộng 14 mm; thành ngoài khay khoảng 2 mm với thân dày 3 mm. Có tùy chọn bật/tắt, chiều rộng, chiều sâu và khe hở.
+- Thân luôn trơn. Chỉ đế có ba kiểu trơn, gân nổi dọc hoặc gân nổi chéo. Gân có tiết diện cong, đầu gân chuyển mềm trước mép; thay đổi được số gân.
 - Tên tiếng Việt, dòng phụ và icon; chữ nổi hoặc khắc chìm, chỉnh cỡ và độ sâu.
 
 ## OpenSCAD và xuất file

@@ -46,46 +46,58 @@ lh = max(2.4,bottom);
 seat = insert_mouth/2+0.7+insert_clearance;
 f = min(rim,wall,(mr-seat)/3);
 tr = tray_d/2;
+tray_wall = max(1.6,min(2.4,wall*2/3));
 rz = tray_h*36.8/60;
 lift = rz+6*s+clearance;
 peak = max(lift+4,rz+stand_h);
 support = min(fh+3*s,tr-wall-4);
 floor_z = max(bottom+1,rz-(moat ? moat_depth : 0));
-body_profile = [[fh,0],[br-f,0],[br,f],[mr,body_h-f],[mr-f,body_h],
- [seat,body_h],[seat,body_h-lh],[mr-wall,body_h-lh],[br-wall,lh],[fh,lh]];
-base_profile = [[0,peak],[min(53.4*s,fh-4),peak],[fh-clearance,lift+lh],
- [fh-clearance,lift],[support,lift],[support,rz],[tr-f,rz],[tr,rz-f],
- [tr,f],[tr-f,0],[tr-wall,0],[tr-wall,floor_z-bottom],[0,floor_z-bottom]];
+slope = (mr-br)/max(1,body_h-f);
+inner_round = min(0.6,lh*0.2,f);
+outer_arc = [for(i=[0:16]) let(t=i/16,u=1-t)
+ [u*u*(mr-slope*f)+2*u*t*mr+t*t*(mr-f),u*u*(body_h-f)+(2*u*t+t*t)*body_h]];
+inner_arc = [for(i=[0:8]) let(t=i/8,u=1-t)
+ [u*u*(seat+inner_round)+(2*u*t+t*t)*seat,(u*u+2*u*t)*body_h+t*t*(body_h-inner_round)]];
+wall_points=[for(i=[1:64]) let(z=f+(body_h-2*f)*i/64) [br+slope*(z-f),z]];
+body_profile = concat([[fh,0],[br-f,0],[br,f]],wall_points,outer_arc,inner_arc,
+ [[seat,body_h-lh],[mr-wall,body_h-lh],[br-wall,lh],[fh,lh]]);
+base_profile = concat([[0,peak],[min(53.4*s,fh-4),peak],[fh-clearance,lift+lh],
+ [fh-clearance,lift],[support,lift],[support,rz],[tr-f,rz],[tr,rz-f]],
+ [for(i=[1:32]) [tr,rz-f-(rz-2*f)*i/32]],
+ [[tr-f,0],[tr-tray_wall,0],[tr-tray_wall,floor_z-bottom],[0,floor_z-bottom]]);
 function blend(z) = let(t=min(1,max(0,(z*102.8571395874/body_h-38)/(100.1-38)))) t*t*(3-2*t);
-function vertex(p,a) = [p[0]*cos(a),p[0]*sin(a),lift+p[1]+blend(p[1])*p[0]*sin(a)*tan(tilt)];
-module tilted_shell() {
- profile=[for(i=[0:len(body_profile)-1]) if(i==0 || norm(body_profile[i]-body_profile[i-1])>0.00001) body_profile[i]];
- n=128; k=len(profile);
- points=[for(p=profile,a=[0:n-1]) vertex(p,a*360/n)];
- faces=[for(i=[0:k-1],j=[0:n-1]) each [
- [i*n+j,i*n+(j+1)%n,((i+1)%k)*n+(j+1)%n],
- [i*n+j,((i+1)%k)*n+(j+1)%n,((i+1)%k)*n+j]]];
- polyhedron(points=points,faces=[for(face=faces) [face[2],face[1],face[0]]],convexity=12);
+function smooth_edge(z,h) = let(e=max(0,min(1,(z-2)/3,(h-3-z)/3))) e*e*(3-2*e);
+function ripple(p,a,is_body) = let(h=is_body?body_h:rz,
+ outer=is_body?br+slope*(p[1]-f):tr,
+ w=max(0,min(1,(p[0]-outer+wall)/wall)),
+ phase=a-(texture=="twist"?tan(30)*180/PI*p[1]/(is_body?br:tr):0))
+ (texture=="smooth" || is_body)?0:0.9*s*smooth_edge(p[1],h)*pow((1+cos(ribs*phase))/2,2)*w;
+function vertex(p,a,is_body) = let(r=p[0]+ripple(p,a,is_body))
+ [r*cos(a),r*sin(a),(is_body?lift:0)+p[1]+(is_body?blend(p[1])*r*sin(a)*tan(tilt):0)];
+module sweep(raw,is_body) {
+ profile=[for(i=[0:len(raw)-1]) if(i==0 || norm(raw[i]-raw[i-1])>0.00001) raw[i]];
+ n=(texture=="smooth" || is_body)?256:max(256,ribs*12); k=len(profile);
+ function id(i,j)=i*n+(profile[i][0]==0?0:j);
+ points=[for(p=profile,a=[0:n-1]) vertex(p,a*360/n,is_body)];
+ faces=[for(i=[0:k-1],j=[0:n-1]) each let(next=(i+1)%k,a=id(i,j),b=id(i,(j+1)%n),c=id(next,(j+1)%n),d=id(next,j))
+ concat(a!=b && b!=c && a!=c?[[c,b,a]]:[],a!=c && c!=d && a!=d?[[d,c,a]]:[])];
+ polyhedron(points=points,faces=faces,convexity=12);
 }
+module tilted_shell() { sweep(body_profile,true); }
 module decoration() { ${polyhedron(model.parts.find(p=>p.name==="text")?.mesh)} }
 module body() { difference() {
  tilted_shell();
  if(windows) translate([0,0,lift+body_h*0.77]) rotate([0,90,0])
-  scale([1.8,1,1]) cylinder(h=220*s,r=7.5*s,center=true,$fn=64);
+  scale([1,1.8,1]) cylinder(h=220*s,r=7.5*s,center=true,$fn=64);
  if(engrave) decoration();
 } }
-module groove() {
- translate([0,0,1]) linear_extrude(height=max(1,rz-2),twist=texture=="twist" ? 12 : 0,slices=18)
-  translate([tr-0.55,-0.6]) square([1.55,1.2]);
-}
 module base() { difference() {
- rotate_extrude() polygon(base_profile);
- if(moat && min(support+moat_gap+moat_width,tr-wall-0.5)>support+moat_gap+1)
+ sweep([for(i=[len(base_profile)-1:-1:0]) base_profile[i]],false);
+ if(moat && min(support+moat_gap+moat_width,tr-tray_wall-0.5)>support+moat_gap+1)
  translate([0,0,rz-moat_depth]) difference() {
-  cylinder(h=moat_depth+1,r=min(support+moat_gap+moat_width,tr-wall-0.5));
+  cylinder(h=moat_depth+1,r=min(support+moat_gap+moat_width,tr-tray_wall-0.5));
   translate([0,0,-0.5]) cylinder(h=moat_depth+2,r=support+moat_gap);
  }
- if(texture!="smooth") for(a=[0:360/ribs:359.999]) rotate([0,0,a]) groove();
 } }
 if(part=="assembly" || part=="body") color("Ivory") body();
 if(part=="assembly" || part=="base") color("Peru") base();
