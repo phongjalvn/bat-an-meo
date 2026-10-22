@@ -25,11 +25,9 @@ export const PRESETS: Preset[] = [
     params: applyInsertSize(
       {
         ...DEFAULT_PARAMS,
-        bodyDiameter: 210,
         height: 110,
-        trayDiameter: 226,
-        trayHeight: 32,
-        islandHeight: 14,
+        trayHeight: 22,
+        islandHeight: 10,
         wallThickness: 3.2,
         bottomThickness: 3.2,
         mouthShrink: 9,
@@ -55,11 +53,9 @@ export const PRESETS: Preset[] = [
     params: applyInsertSize(
       {
         ...DEFAULT_PARAMS,
-        bodyDiameter: 230,
         height: 118,
-        trayDiameter: 246,
-        trayHeight: 34,
-        islandHeight: 14,
+        trayHeight: 22,
+        islandHeight: 10,
         wallThickness: 3.4,
         bottomThickness: 3.4,
         mouthShrink: 9,

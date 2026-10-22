@@ -44,7 +44,7 @@ describe("default pet bowl export", () => {
     const triCount = new DataView(stl.buffer, stl.byteOffset, stl.byteLength).getUint32(80, true);
     expect(triCount).toBeGreaterThan(100);
     expect(model.parts.some((p) => p.name === "text")).toBe(true);
-    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d190_h103_w3p0_i130(_Boom)?/);
+    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h103_w3p0_i130(_Boom)?/);
   });
 
   it("exports Bambu Lab and Snapmaker U1 3MF projects with part-to-filament mapping", async () => {
@@ -119,9 +119,15 @@ describe("stainless insert sizes", () => {
     expect(pSmall.pocketBaseR).toBeCloseTo(70 / 2 + pSmall.clearance, 4);
     expect(pSmall.pocketLipR).toBeCloseTo(130 / 2 + pSmall.clearance, 4);
     expect(pSmall.pocketLipR).toBeGreaterThan(pSmall.pocketMouthR);
-    expect(pSmall.rx * 2).toBeGreaterThanOrEqual(minHolderDiameter(sizedSmall) - 0.01);
+    expect(pSmall.topR * 2).toBeGreaterThanOrEqual(minHolderDiameter(sizedSmall) - 0.01);
     expect(minHolderDiameter(sizedSmall)).toBeCloseTo(130 + 2 * sizedSmall.wallThickness + 2 * sizedSmall.insertClearance, 4);
+    expect(sizedSmall.bodyDiameter).toBeCloseTo(150, 4);
+    expect(pSmall.topR * 2).toBeCloseTo(150, 4);
+    expect(pSmall.topR - pSmall.lipR).toBeCloseTo(sizedSmall.rimMargin, 4);
+    expect(pSmall.rx).toBeGreaterThan(pSmall.topR);
     expect(pSmall.trayR * 2).toBeGreaterThanOrEqual(minTrayDiameter(sizedSmall) - 0.01);
+    expect(pSmall.trayR * 2 - pSmall.rx * 2).toBeGreaterThanOrEqual(10);
+    expect(pSmall.trayR * 2 - pSmall.rx * 2).toBeLessThanOrEqual(16);
 
     const sizedLarge = applyInsertSize({ ...DEFAULT_PARAMS, bodyDiameter: 150 }, "large");
     const pLarge = resolvedDims(sizedLarge);
@@ -129,9 +135,14 @@ describe("stainless insert sizes", () => {
     expect(pLarge.mouthInner).toBe(160);
     expect(pLarge.baseR * 2).toBe(95);
     expect(pLarge.insertHeight).toBe(55);
-    expect(sizedLarge.bodyDiameter).toBeGreaterThanOrEqual(minHolderDiameter(sizedLarge));
-    expect(sizedLarge.bodyDiameter).toBeGreaterThanOrEqual(190 + 2 * sizedLarge.wallThickness);
+    expect(sizedLarge.bodyDiameter).toBeCloseTo(210, 4);
+    expect(pLarge.topR * 2).toBeCloseTo(210, 4);
     expect(pLarge.pocketLipR).toBeGreaterThan(pLarge.pocketMouthR);
+
+    const manual = applyInsertSize({ ...DEFAULT_PARAMS, linkBodyToInsert: false, bodyDiameter: 176 }, "small");
+    expect(manual.linkBodyToInsert).toBe(false);
+    expect(manual.bodyDiameter).toBe(176);
+    expect(manual.trayDiameter).toBeGreaterThanOrEqual(minTrayDiameter(manual) - 0.01);
   });
 
   it("keeps custom measured lip, mouth, base, and height", async () => {
@@ -223,7 +234,7 @@ describe("tray moat and centering fit", () => {
     expect(xml).not.toContain('key="name" value="moat"');
 
     const p = resolvedDims(params);
-    expect(p.islandR / p.rx).toBeGreaterThan(0.78);
+    expect(p.islandR / p.rx).toBeGreaterThan(0.76);
     expect(p.islandR / p.rx).toBeLessThan(0.86);
     expect(p.pegR / p.rx).toBeGreaterThan(0.64);
     expect(p.pegR / p.rx).toBeLessThan(0.73);
@@ -277,22 +288,20 @@ describe("reference silhouette", () => {
     const body = model.parts.find((part) => part.name === "body")!;
     const base = model.parts.find((part) => part.name === "base")!;
 
-    expect(p.rx * 2).toBeCloseTo(190, 4);
-    expect(p.topR).toBeLessThan(p.rx - 3);
-    expect(p.neckR * 2).toBeGreaterThan(160);
-    expect(p.neckR * 2).toBeLessThan(172);
+    expect(p.topR * 2).toBeCloseTo(150, 4);
+    expect(p.topR - p.lipR).toBeGreaterThan(8);
+    expect(p.topR - p.lipR).toBeLessThan(12);
+    expect(p.rx).toBeGreaterThan(p.topR + 3);
+    expect(p.neckR).toBeLessThan(p.rx - 4);
     expect(p.bodyH).toBeCloseTo(103, 4);
-    expect(p.trayR - p.rx).toBeGreaterThanOrEqual(5);
-    expect(p.trayR - p.rx).toBeLessThanOrEqual(12);
-    expect(p.trayH).toBeGreaterThanOrEqual(25);
-    expect(p.trayH).toBeLessThanOrEqual(36);
-    expect(p.islandH).toBeLessThan(p.trayH - 8);
-    expect(p.islandR * 2).toBeGreaterThan(148);
-    expect(p.islandR * 2).toBeLessThan(160);
-    expect(p.pegR * 2).toBeGreaterThan(125);
-    expect(p.pegR * 2).toBeLessThan(135);
-    expect(p.socketR * 2).toBeGreaterThan(126);
-    expect(p.socketR * 2).toBeLessThan(136);
+    expect(p.trayR * 2 - p.rx * 2).toBeGreaterThanOrEqual(10);
+    expect(p.trayR * 2 - p.rx * 2).toBeLessThanOrEqual(16);
+    expect(p.trayH).toBeGreaterThanOrEqual(20);
+    expect(p.trayH).toBeLessThanOrEqual(25);
+    expect(p.rimT).toBeGreaterThanOrEqual(4);
+    expect(p.rimT).toBeLessThanOrEqual(5);
+    expect(p.islandH).toBeLessThan(p.trayH - 6);
+    expect(p.neckR).toBeLessThan(p.wallInner - 3);
     expect(p.wall).toBeCloseTo(3, 4);
 
     const midLo = p.zFootTop + p.bodyH * 0.35;
@@ -355,6 +364,17 @@ describe("reference silhouette", () => {
     }
     expect(izMax - p.zFront).toBeGreaterThan(-8);
     expect(izMax).toBeGreaterThan(p.zFront - 2);
+
+    const z0 = p.zShoulder + p.zCyl0 + 3;
+    const z1 = p.zBack - 5;
+    let prev = 0;
+    for (let z = z0; z <= z1; z += 3) {
+      const r = sliceMaxRadius(body.mesh.positions, body.mesh.indices, z);
+      expect(r).toBeGreaterThan(p.topR - 1.6);
+      expect(r).toBeLessThan(p.topR + 1.3);
+      if (prev) expect(Math.abs(r - prev)).toBeLessThan(2.5);
+      prev = r;
+    }
   });
 });
 
@@ -368,6 +388,29 @@ describe("icon outlines", () => {
     expect(isClosedPrintable(open)).toBe(false);
   });
 });
+
+function sliceMaxRadius(positions: Float32Array, indices: Uint32Array, z: number): number {
+  let maxR = 0;
+  for (let i = 0; i < indices.length; i += 3) {
+    const ids = [indices[i], indices[i + 1], indices[i + 2]];
+    const zs = ids.map((id) => positions[id * 3 + 2]);
+    if (z < Math.min(...zs) - 1e-4 || z > Math.max(...zs) + 1e-4) continue;
+    for (let e = 0; e < 3; e++) {
+      const a = ids[e];
+      const b = ids[(e + 1) % 3];
+      const za = positions[a * 3 + 2];
+      const zb = positions[b * 3 + 2];
+      if ((za - z) * (zb - z) > 1e-8) continue;
+      const denom = zb - za;
+      const t = Math.abs(denom) < 1e-8 ? 0 : (z - za) / denom;
+      if (t < -1e-3 || t > 1 + 1e-3) continue;
+      const x = positions[a * 3] + (positions[b * 3] - positions[a * 3]) * t;
+      const y = positions[a * 3 + 1] + (positions[b * 3 + 1] - positions[a * 3 + 1]) * t;
+      maxR = Math.max(maxR, Math.hypot(x, y));
+    }
+  }
+  return maxR;
+}
 
 function radiiNear(positions: Float32Array, z: number, tol: number) {
   const rs: number[] = [];

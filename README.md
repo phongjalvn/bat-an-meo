@@ -2,13 +2,13 @@
 
 Vietnamese-first web app that designs a 3D-printable pet bowl and exports slicer-ready files.
 
-The holder is an upright, slightly tapered cone — wider at the visible base, narrower at the top — with vertical-ish walls and a generously rounded lip. Only the top face is cut at 0–15° (low at the front); the stainless-insert pocket is drilled perpendicular to that face so the bowl sits deep and only its rolled rim shows. At the bottom the body cinches into a recessed neck that drops into a low circular tray. The tray’s outer diameter is 10–20 mm larger than the body, with a thick rounded rim; the dark ring between neck and rim is the in-dish anti-ant moat. A centering island/peg locates the neck. Geometry is generated with lathe/revolve profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
+The holder is an upright, slightly tapered cone — wider at the visible base, narrower at the top — with a rounded lip that is one continuous fillet on the tilted face. Only the top face is cut at 0–15° (low at the front); the stainless-insert pocket is drilled perpendicular to that face so the bowl sits deep and only its rolled rim shows. The top diameter follows the insert: lip diameter plus a 10 mm margin each side (Small ≈ Ø150, Large ≈ Ø210), with a manual override. At the bottom the body cinches into a recessed neck that drops into a low circular tray, about 20–25 mm tall and 10–16 mm wider than the body, with a thin rounded rim. The dark ring between neck and rim is the in-dish anti-ant moat. A centering island/peg scales with the body. Geometry is generated with lathe/revolve profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
 
 ## Features
 
 - Live 3D preview with orbit, front/top/side cameras, zoom, and a reference plate that is not exported
 - Stainless insert sizes from the real bowls: **Nhỏ 11 cm** (lip 130 / mouth 110 / base 70 / height 40 mm) and **Lớn 16 cm** (lip 190 / mouth 160 / base 95 / height 55 mm), plus Custom for those four measurements
-- Pocket follows the tapered bowl plus clearance, with a shallow counterbore for the rolled rim lip; holder outer diameter is at least lip + 2× wall
+- Pocket follows the tapered bowl plus clearance, with a shallow counterbore for the rolled rim lip. The body top is the insert lip plus two margins (default 10 mm each side); the base follows the taper, and the neck, island, peg, and tray scale with it
 - Single bowl only. Saved projects that still carry a double-bowl flag load as one bowl (that field is ignored)
 - Design sliders for body and tray size, top taper, wall/bottom thickness, island height, rounded rim, 0–15° cat tilt, centering-fit clearance, anti-slip groove
 - Anti-hunch (tilted top face, upright walls) and an anti-ant water moat that reads as the dark ring around the neck
@@ -46,7 +46,7 @@ Open the printed local URL (default `http://localhost:5173`).
 - Small (11 cm) and Large (16 cm) insert presets set pocket + holder diameter; Custom keeps measured lip / mouth / base / height
 - the anti-hunch / anti-ant preset keeps a watertight moat floor inside the tray
 - a saved `doubleBowl` flag is ignored and the mesh stays one circular tray
-- the default body stays circular/upright, tapers narrower at the top, and matches the scanned Ø190 / Ø166 neck / Ø154 island / Ø130 peg proportions with a tray 10–20 mm larger than the body
+- the default body stays circular/upright, tapers wider at the base, and sizes the top to the insert lip plus a 10 mm margin, with the tray 10–16 mm larger than that base
 
 ## Deploy to GitHub Pages
 
