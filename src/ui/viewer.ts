@@ -25,11 +25,11 @@ export class BowlViewer {
     this.renderer.toneMappingExposure = 1.05;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x15181e);
-    this.camera = new THREE.PerspectiveCamera(35, 1, 1, 2000);
-    this.camera.position.set(250, 105, 230);
+    this.camera = new THREE.PerspectiveCamera(32, 1, 1, 2000);
+    this.camera.position.set(200, 175, 280);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.target.set(0, 42, 0);
+    this.controls.target.set(0, 70, 0);
 
     const hemi = new THREE.HemisphereLight(0xf3efe6, 0x2a2620, 0.9);
     const key = new THREE.DirectionalLight(0xffffff, 1.35);
@@ -68,11 +68,11 @@ export class BowlViewer {
   setView(view: CameraView, model?: BowlModel) {
     const h = model?.height ?? 110;
     const w = model?.width ?? 130;
-    if (view === "front") this.camera.position.set(0, h * 0.55, Math.max(w, h) * 2.2);
+    if (view === "front") this.camera.position.set(0, h * 0.48, Math.max(w, h) * 2.05);
     else if (view === "top") this.camera.position.set(0, Math.max(w, h) * 2.4, 0.01);
-    else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.2, h * 0.55, 0);
-    else this.camera.position.set(w * 1.35, Math.max(58, h * 0.42), w * 1.05);
-    this.controls.target.set(0, h * 0.38, 0);
+    else if (view === "side") this.camera.position.set(Math.max(w, h) * 2.05, h * 0.48, 0);
+    else this.camera.position.set(w * 0.8, h * 0.82, w * 1.52);
+    this.controls.target.set(0, h * 0.42, 0);
     this.controls.update();
   }
 
@@ -92,8 +92,8 @@ export class BowlViewer {
       const color = colorOf(part.name);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: part.name === "base" ? 0.72 : 0.38,
-        metalness: part.name === "text" ? 0.08 : 0.02,
+        roughness: part.name === "base" ? 0.78 : part.name === "body" ? 0.64 : 0.36,
+        metalness: part.name === "text" ? 0.06 : 0.02,
       });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;
@@ -103,11 +103,10 @@ export class BowlViewer {
     if (model.insert) {
       const geom = toGeometry(model.insert.positions, model.insert.indices);
       geom.computeVertexNormals();
-      const mat = new THREE.MeshPhysicalMaterial({
+      const mat = new THREE.MeshStandardMaterial({
         color: PART_COLORS.insert,
-        metalness: 0.92,
-        roughness: 0.22,
-        clearcoat: 0.35,
+        metalness: 0.55,
+        roughness: 0.28,
       });
       const mesh = new THREE.Mesh(geom, mat);
       mesh.rotation.x = -Math.PI / 2;

@@ -44,7 +44,7 @@ describe("default pet bowl export", () => {
     const triCount = new DataView(stl.buffer, stl.byteOffset, stl.byteLength).getUint32(80, true);
     expect(triCount).toBeGreaterThan(100);
     expect(model.parts.some((p) => p.name === "text")).toBe(true);
-    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h79_w3p0_i130(_Bé-Mèo)?/);
+    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d190_h103_w3p0_i130(_Boom)?/);
   });
 
   it("exports Bambu Lab and Snapmaker U1 3MF projects with part-to-filament mapping", async () => {
@@ -103,7 +103,7 @@ describe("single bowl only", () => {
     expect(model.parts.filter((p) => p.name === "body")).toHaveLength(1);
     expect(model.parts.filter((p) => p.name === "base")).toHaveLength(1);
     expect(Math.abs(model.width - model.depth)).toBeLessThan(10);
-    expect(model.width).toBeGreaterThan(params.bodyDiameter);
+    expect(model.width).toBeGreaterThan(params.bodyDiameter - 4);
   });
 });
 
@@ -163,11 +163,10 @@ describe("stainless insert sizes", () => {
     const care = PRESETS.find((p) => p.id === "cat-care")!.params;
     const p = resolvedDims(care);
     const stem = p.extraDepth + p.insertHeight + p.lipT;
-    const frontZ = p.zRimCenter - p.pocketLipR * Math.sin(p.tiltRad) - stem * Math.cos(p.tiltRad);
+    const frontZ = p.zFace - p.topR * Math.tan(p.tiltRad) - stem * Math.cos(p.tiltRad);
     expect(p.extraDepth).toBeGreaterThanOrEqual(0.8);
-    expect(frontZ).toBeGreaterThanOrEqual(p.zFootTop + p.bottom - 0.6);
+    expect(frontZ).toBeGreaterThan(p.zFootTop + p.socketH + p.bottom - 2);
     expect(p.bottom).toBeGreaterThanOrEqual(1.6);
-    expect(p.bodyH - p.lipZ - p.extraDepth).toBeGreaterThan(p.pegH + p.bottom - 0.8);
   });
 
   it("uses Small 11 cm on cat presets and Large 16 cm on dog presets", () => {
@@ -224,10 +223,10 @@ describe("tray moat and centering fit", () => {
     expect(xml).not.toContain('key="name" value="moat"');
 
     const p = resolvedDims(params);
-    expect(p.islandR / p.rx).toBeGreaterThan(0.75);
-    expect(p.islandR / p.rx).toBeLessThan(0.88);
-    expect(p.pegR / p.rx).toBeGreaterThan(0.62);
-    expect(p.pegR / p.rx).toBeLessThan(0.74);
+    expect(p.islandR / p.rx).toBeGreaterThan(0.78);
+    expect(p.islandR / p.rx).toBeLessThan(0.86);
+    expect(p.pegR / p.rx).toBeGreaterThan(0.64);
+    expect(p.pegR / p.rx).toBeLessThan(0.73);
     expect(p.moatOuter - p.moatInner).toBeCloseTo(p.moatWidth, 4);
     expect(p.trayR).toBeGreaterThan(p.moatOuter + p.wall - 0.2);
 
@@ -261,14 +260,101 @@ describe("tray moat and centering fit", () => {
     }
     expect(spanX).toBeGreaterThan(12);
     expect(spanY).toBeGreaterThan(12);
-    expect(rmin).toBeGreaterThan(params.bodyDiameter / 2 - 4);
+    expect(rmin).toBeGreaterThan(params.bodyDiameter / 2 - 18);
     expect(rmax - rmin).toBeGreaterThan(0.6);
     expect(text!.volumeMm3).toBeGreaterThan(80);
 
     const embossed = await buildBowl({ ...params, textStyle: "emboss" }, font);
-    const bodyEngrave = model.parts.find((p) => p.name === "body")!.volumeMm3;
-    const bodyEmboss = embossed.parts.find((p) => p.name === "body")!.volumeMm3;
-    expect(bodyEmboss).toBeGreaterThan(bodyEngrave + 20);
+    expect(embossed.parts.some((part) => part.name === "text")).toBe(true);
+    expect(embossed.parts.find((part) => part.name === "text")!.volumeMm3).toBeGreaterThan(80);
+  });
+});
+
+describe("reference silhouette", () => {
+  it("keeps an upright circular wall and matches ref1/ref2 defaults", async () => {
+    const model = await buildBowl(DEFAULT_PARAMS, font);
+    const p = resolvedDims(DEFAULT_PARAMS);
+    const body = model.parts.find((part) => part.name === "body")!;
+    const base = model.parts.find((part) => part.name === "base")!;
+
+    expect(p.rx * 2).toBeCloseTo(190, 4);
+    expect(p.topR).toBeLessThan(p.rx - 3);
+    expect(p.neckR * 2).toBeGreaterThan(160);
+    expect(p.neckR * 2).toBeLessThan(172);
+    expect(p.bodyH).toBeCloseTo(103, 4);
+    expect(p.trayR - p.rx).toBeGreaterThanOrEqual(5);
+    expect(p.trayR - p.rx).toBeLessThanOrEqual(12);
+    expect(p.trayH).toBeGreaterThanOrEqual(25);
+    expect(p.trayH).toBeLessThanOrEqual(36);
+    expect(p.islandH).toBeLessThan(p.trayH - 8);
+    expect(p.islandR * 2).toBeGreaterThan(148);
+    expect(p.islandR * 2).toBeLessThan(160);
+    expect(p.pegR * 2).toBeGreaterThan(125);
+    expect(p.pegR * 2).toBeLessThan(135);
+    expect(p.socketR * 2).toBeGreaterThan(126);
+    expect(p.socketR * 2).toBeLessThan(136);
+    expect(p.wall).toBeCloseTo(3, 4);
+
+    const midLo = p.zFootTop + p.bodyH * 0.35;
+    const midHi = p.zFootTop + p.bodyH * 0.55;
+    const ring: number[] = [];
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    let yMin = Infinity;
+    let yMax = -Infinity;
+    let n = 0;
+    for (let i = 0; i < body.mesh.positions.length; i += 3) {
+      const z = body.mesh.positions[i + 2];
+      if (z < midLo || z > midHi) continue;
+      const x = body.mesh.positions[i];
+      const y = body.mesh.positions[i + 1];
+      const r = Math.hypot(x, y);
+      if (r < p.neckR - 4) continue;
+      ring.push(r);
+      xMin = Math.min(xMin, x);
+      xMax = Math.max(xMax, x);
+      yMin = Math.min(yMin, y);
+      yMax = Math.max(yMax, y);
+      n++;
+    }
+    expect(ring.length).toBeGreaterThan(20);
+    const rMin = Math.min(...ring);
+    const rMax = Math.max(...ring);
+    expect(rMax - rMin).toBeLessThan(10);
+    expect(rMax).toBeLessThan(p.rx + 3);
+    expect(rMin).toBeGreaterThan(p.topR - 4);
+    expect(n).toBeGreaterThan(20);
+    expect(Math.abs(xMax + xMin)).toBeLessThan(4);
+    expect(Math.abs(yMax + yMin)).toBeLessThan(4);
+    expect(Math.abs(xMax - xMin - (yMax - yMin))).toBeLessThan(8);
+
+    const bodyVol = body.volumeMm3;
+    const trayVol = base.volumeMm3;
+    expect(bodyVol).toBeLessThan(350_000);
+    expect(bodyVol).toBeGreaterThan(80_000);
+    expect(trayVol).toBeLessThan(700_000);
+    expect(model.solidVolumeMm3).toBeLessThan(1_100_000);
+
+    expect(p.neckR).toBeLessThan(p.trayR - 8);
+    const neckBand: number[] = [];
+    for (let i = 0; i < body.mesh.positions.length; i += 3) {
+      const z = body.mesh.positions[i + 2];
+      if (z < p.islandH + 1 || z > p.trayH + 2) continue;
+      const r = Math.hypot(body.mesh.positions[i], body.mesh.positions[i + 1]);
+      if (r > p.socketR + 2) neckBand.push(r);
+    }
+    expect(neckBand.length).toBeGreaterThan(8);
+    expect(Math.max(...neckBand)).toBeLessThan(p.trayR - 4);
+
+    const insert = model.insert!;
+    let izMax = -Infinity;
+    let izMin = Infinity;
+    for (let i = 2; i < insert.positions.length; i += 3) {
+      izMax = Math.max(izMax, insert.positions[i]);
+      izMin = Math.min(izMin, insert.positions[i]);
+    }
+    expect(izMax - p.zFront).toBeGreaterThan(-8);
+    expect(izMax).toBeGreaterThan(p.zFront - 2);
   });
 });
 

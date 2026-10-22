@@ -38,8 +38,8 @@ export interface IconSlot {
 
 export function defaultIcons(): IconSlot[] {
   return [
-    { id: "icon-1", enabled: true, kind: "paw", anchor: "left", sizeMm: 11, rotationDeg: 0 },
-    { id: "icon-2", enabled: false, kind: "heart", anchor: "right", sizeMm: 11, rotationDeg: 0 },
+    { id: "icon-1", enabled: true, kind: "paw", anchor: "right", sizeMm: 13, rotationDeg: 0 },
+    { id: "icon-2", enabled: false, kind: "heart", anchor: "left", sizeMm: 11, rotationDeg: 0 },
   ];
 }
 
@@ -94,7 +94,7 @@ export const PARAM_LIMITS = {
   bottomThickness: { min: 1.6, max: 10, step: 0.1 },
   mouthShrink: { min: 0, max: 20, step: 0.5 },
   trayDiameter: { min: 110, max: 420, step: 1 },
-  trayHeight: { min: 10, max: 60, step: 0.5 },
+  trayHeight: { min: 10, max: 70, step: 0.5 },
   islandHeight: { min: 10, max: 80, step: 0.5 },
   rimRadius: { min: 0, max: 10, step: 0.1 },
   tiltDeg: { min: 0, max: 15, step: 0.5 },
@@ -113,21 +113,21 @@ export const PARAM_LIMITS = {
 } as const;
 
 export const DEFAULT_PARAMS: BowlParams = {
-  bodyDiameter: 150,
-  height: 79,
+  bodyDiameter: 190,
+  height: 103,
   innerDepth: 40,
   wallThickness: 3,
   bottomThickness: 3,
-  mouthShrink: 0,
-  trayDiameter: 250,
-  trayHeight: 20,
-  islandHeight: 22,
-  rimRadius: 3.5,
+  mouthShrink: 9,
+  trayDiameter: 206,
+  trayHeight: 32,
+  islandHeight: 14,
+  rimRadius: 8,
   tiltDeg: 15,
   moatEnabled: true,
-  moatWidth: 16,
+  moatWidth: 12,
   moatDepth: 10,
-  moatGap: 6,
+  moatGap: 3,
   fitClearance: 0.45,
   insertSize: "small",
   insertLipDiameter: 130,
@@ -137,13 +137,13 @@ export const DEFAULT_PARAMS: BowlParams = {
   insertClearance: 0.4,
   insertLipThickness: 1.4,
   antiSlipGroove: true,
-  text: "Bé Mèo",
+  text: "Boom",
   textLine2: "30/04/2026",
-  fontSize: 17,
-  embossDepth: 1,
+  fontSize: 26,
+  embossDepth: 1.1,
   textStyle: "engrave",
   icons: defaultIcons(),
-  baseTexture: "ribs",
+  baseTexture: "smooth",
   ribCount: 64,
 };
 
@@ -228,11 +228,8 @@ export function minHolderDiameter(
   return params.insertLipDiameter + 2 * params.wallThickness + 2 * params.insertClearance;
 }
 
-export function minTrayDiameter(
-  params: Pick<BowlParams, "bodyDiameter" | "wallThickness" | "moatEnabled" | "moatWidth" | "moatGap">,
-): number {
-  const water = params.moatEnabled ? params.moatWidth : 4;
-  return params.bodyDiameter + 2 * (params.moatGap + water + params.wallThickness);
+export function minTrayDiameter(params: Pick<BowlParams, "bodyDiameter">): number {
+  return params.bodyDiameter + 10;
 }
 
 export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlParams {
@@ -249,11 +246,7 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   next.bodyDiameter = Math.max(next.bodyDiameter, minHolderDiameter(next));
   const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
   const lipZ = next.insertHeight + next.insertLipThickness;
-  const lipR = next.insertLipDiameter / 2 + next.insertClearance;
-  const pegReserve = 16;
-  const minH = Math.ceil(
-    (lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + pegReserve + lipR * Math.sin(tiltRad) + 2,
-  );
+  const minH = Math.ceil(lipZ + next.bottomThickness + next.insertLipDiameter * Math.tan(tiltRad) + 12);
   next.height = Math.max(next.height, minH);
   next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
   return next;

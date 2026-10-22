@@ -2,7 +2,7 @@
 
 Vietnamese-first web app that designs a 3D-printable pet bowl and exports slicer-ready files.
 
-The holder is a single tilted cylinder with a recessed pocket for a removable stainless insert (preview only). The printable base is one circular tray: outer wall, floor, optional anti-ant water moat inside the dish, and a centering island with a peg that seats the body. Geometry is generated with lathe/revolve profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
+The holder is an upright, slightly tapered cone — wider at the visible base, narrower at the top — with vertical-ish walls and a generously rounded lip. Only the top face is cut at 0–15° (low at the front); the stainless-insert pocket is drilled perpendicular to that face so the bowl sits deep and only its rolled rim shows. At the bottom the body cinches into a recessed neck that drops into a low circular tray. The tray’s outer diameter is 10–20 mm larger than the body, with a thick rounded rim; the dark ring between neck and rim is the in-dish anti-ant moat. A centering island/peg locates the neck. Geometry is generated with lathe/revolve profiles and [manifold-3d](https://github.com/elalish/manifold) so the meshes stay watertight for slicers.
 
 ## Features
 
@@ -10,9 +10,9 @@ The holder is a single tilted cylinder with a recessed pocket for a removable st
 - Stainless insert sizes from the real bowls: **Nhỏ 11 cm** (lip 130 / mouth 110 / base 70 / height 40 mm) and **Lớn 16 cm** (lip 190 / mouth 160 / base 95 / height 55 mm), plus Custom for those four measurements
 - Pocket follows the tapered bowl plus clearance, with a shallow counterbore for the rolled rim lip; holder outer diameter is at least lip + 2× wall
 - Single bowl only. Saved projects that still carry a double-bowl flag load as one bowl (that field is ignored)
-- Design sliders for body and tray size, wall/bottom thickness, island height, rounded rim, 0–15° cat tilt, centering-fit clearance, anti-slip groove
-- Anti-hunch (whole-body tilt on a flat seat) and an anti-ant water moat cut into the tray around the island
-- Name plus optional second line, wrapped on the cylinder: engraved inlay or flush emboss
+- Design sliders for body and tray size, top taper, wall/bottom thickness, island height, rounded rim, 0–15° cat tilt, centering-fit clearance, anti-slip groove
+- Anti-hunch (tilted top face, upright walls) and an anti-ant water moat that reads as the dark ring around the neck
+- Name plus optional date line, wrapped on the front: large name, icon beside it, small date underneath; engraved inlay or flush emboss
 - Customizable icons (paw, cat, dog, heart, fish, bone, star) or uploaded SVG / PNG; per-icon placement, size, and rotation
 - Base textures: smooth, vertical ribs, twisted ribs
 - Presets: small cat, medium dog, large dog, cat anti-hunch / anti-ant
@@ -46,6 +46,7 @@ Open the printed local URL (default `http://localhost:5173`).
 - Small (11 cm) and Large (16 cm) insert presets set pocket + holder diameter; Custom keeps measured lip / mouth / base / height
 - the anti-hunch / anti-ant preset keeps a watertight moat floor inside the tray
 - a saved `doubleBowl` flag is ignored and the mesh stays one circular tray
+- the default body stays circular/upright, tapers narrower at the top, and matches the scanned Ø190 / Ø166 neck / Ø154 island / Ø130 peg proportions with a tray 10–20 mm larger than the body
 
 ## Deploy to GitHub Pages
 

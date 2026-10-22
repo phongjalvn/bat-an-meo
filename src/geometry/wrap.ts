@@ -32,6 +32,7 @@ export function wrapPolygonsToCylinder(
   thickness: number,
   zCenter: number,
   inset = 0.25,
+  taperPerMm = 0,
 ): Manifold | null {
   if (!polygons.length || radius < 8 || thickness <= 0) return null;
   const { CrossSection } = getEngine();
@@ -54,8 +55,9 @@ export function wrapPolygonsToCylinder(
     const x = mesh.vertProperties[i * stride];
     const y = mesh.vertProperties[i * stride + 1];
     const z = mesh.vertProperties[i * stride + 2];
-    const theta = x / radius;
-    const r = Math.max(2, radius - inset + z);
+    const surfaceR = radius + taperPerMm * y;
+    const theta = x / Math.max(8, surfaceR);
+    const r = Math.max(2, surfaceR - inset + z);
     positions[i * 3] = r * Math.sin(theta);
     positions[i * 3 + 1] = -r * Math.cos(theta);
     positions[i * 3 + 2] = y + zCenter;

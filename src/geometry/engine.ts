@@ -37,38 +37,48 @@ export function resolvedDims(params: BowlParams) {
     }) / 2;
   const rx = Math.max(bodyRMin, clamp(params.bodyDiameter, 90, 320) / 2);
   const bodyH = clamp(params.height, 40, 180);
+  // Photo: slightly tapered cone — wider at the visible base, narrower at the top.
+  const topR = Math.max(bodyRMin, rx - clamp(params.mouthShrink, 0, 20));
+  // Ref1 neck ~Ø166 on a Ø190 body; the waist tucks in as the body drops into the tray.
+  const neckR = clamp(rx * 0.874, 40, rx - 6);
   const pocketMouthR = mouthOuterR + clearance;
   const pocketBaseR = baseR + clearance;
   const pocketLipR = lipR + clearance;
   const lipZ = insertHeight + lipT;
-  const extraBot = rx * Math.tan(tiltRad) + 10;
-  const extraTop = rx * Math.tan(tiltRad) + 6;
-  // Only a little extra cavity — a deep pocket would open into the centering socket.
   const extraDepth = 0.8;
   const floorT = Math.max(1.8, Math.min(3.2, bottom));
-  const moatWidth = clamp(params.moatWidth, 8, 40);
+  const moatWidth = clamp(params.moatWidth, 6, 40);
   const moatDepth = clamp(params.moatDepth, 6, 22);
   const moatGap = clamp(params.moatGap, 1, 24);
-  const pegR = clamp(rx * 0.69, 18, rx - wall - 8);
+  const islandR = clamp(rx * 0.811, neckR - 12, neckR - 2);
+  const pegR = clamp(rx * 0.684, 18, islandR - 6);
   const socketR = pegR + fitClearance;
-  const islandR = clamp(rx * 0.81, pegR + wall + 4, rx - 4);
-  const maxPeg = bodyH - lipZ - extraDepth - bottom - 2;
-  const pegH = clamp(Math.min(bodyH * 0.32, maxPeg), 12, 32);
+  const socketH = 3.6;
+  const pegH = 3.2;
+  const minTrayR = minTrayDiameter({ bodyDiameter: rx * 2 }) / 2;
+  const trayR = Math.max(clamp(params.trayDiameter, 110, 420) / 2, minTrayR);
+  const rimT = Math.max(6.5, Math.min(10, trayR - neckR - 2));
+  const wallInner = Math.max(islandR + 4, trayR - rimT);
   const moatInner = islandR + moatGap;
-  const moatOuter = params.moatEnabled ? moatInner + moatWidth : moatInner;
-  const minTrayR = minTrayDiameter({
-    bodyDiameter: rx * 2,
-    wallThickness: wall,
-    moatEnabled: params.moatEnabled,
-    moatWidth,
-    moatGap,
-  }) / 2;
-  const trayR = Math.max(clamp(params.trayDiameter, 110, 420) / 2, minTrayR, moatOuter + wall);
-  const trayH = Math.max(clamp(params.trayHeight, 10, 60), floorT + (params.moatEnabled ? moatDepth : 0) + 2.4);
-  const islandH = Math.max(clamp(params.islandHeight, 10, 80), floorT + (params.moatEnabled ? moatDepth : 0) + 2.2);
+  const moatOuter = params.moatEnabled
+    ? Math.min(moatInner + moatWidth, wallInner - 0.8)
+    : Math.max(moatInner, neckR + 2);
+  const islandH = Math.max(clamp(params.islandHeight, 10, 80), floorT + 6);
+  const trayH = Math.max(clamp(params.trayHeight, 16, 70), 24);
+  const waistH = 14;
+  // Neck stays narrow through the rim and a few millimetres above it so the
+  // waist and the dark moat ring are visible from a 3/4 view.
+  const neckH = Math.max(10, trayH - islandH + 8);
   const zShoulder = islandH;
   const zFootTop = islandH;
-  const zRimCenter = zFootTop + bodyH;
+  const zFace = zFootTop + bodyH;
+  const zFront = zFace - topR * Math.tan(tiltRad);
+  const zBack = zFace + topR * Math.tan(tiltRad);
+  const zWaist1 = islandH + neckH + waistH;
+  const zFillet = islandH + bodyH - Math.max(8, rim);
+  const wrapT = clamp((0.55 * (zFront + zFace) * 0.5 - zWaist1) / Math.max(1, zFillet - zWaist1), 0, 1);
+  const wrapR = rx + (topR - rx) * wrapT;
+  const wrapTaper = (topR - rx) / Math.max(1, zFillet - zWaist1);
   return {
     wall,
     bottom,
@@ -87,15 +97,27 @@ export function resolvedDims(params: BowlParams) {
     insertHeight,
     lipZ,
     extraDepth,
-    extraBot,
-    extraTop,
+    extraBot: 0,
+    extraTop: 0,
     pocketMouthR,
     pocketBaseR,
     pocketLipR,
     rx,
+    topR,
+    neckR,
+    neckH,
+    waistH,
+    wrapR,
+    wrapTaper,
+    zWaist1,
+    rimT,
+    wallInner,
     bodyH,
     zFootTop,
-    zRimCenter,
+    zRimCenter: zFace,
+    zFace,
+    zFront,
+    zBack,
     zShoulder,
     floorT,
     moatWidth,
@@ -105,6 +127,7 @@ export function resolvedDims(params: BowlParams) {
     moatOuter,
     pegR,
     socketR,
+    socketH,
     islandR,
     trayR,
     trayH,
@@ -156,22 +179,6 @@ function partFrom(name: BowlPart["name"], solid: Manifold): BowlPart {
   return { name, mesh, triangleCount: mesh.indices.length / 3, volumeMm3: Math.max(0, solid.volume()) };
 }
 
-function toothedRing(outerR: number, innerR: number, count: number): Array<[number, number]> {
-  const pts: Array<[number, number]> = [];
-  const n = Math.max(8, Math.round(count));
-  for (let i = 0; i < n; i++) {
-    const a0 = (i / n) * Math.PI * 2;
-    const a1 = ((i + 0.42) / n) * Math.PI * 2;
-    const a2 = ((i + 0.58) / n) * Math.PI * 2;
-    pts.push([Math.cos(a0) * innerR, Math.sin(a0) * innerR]);
-    pts.push([Math.cos(a0) * outerR, Math.sin(a0) * outerR]);
-    pts.push([Math.cos(a1) * outerR, Math.sin(a1) * outerR]);
-    pts.push([Math.cos(a2) * innerR, Math.sin(a2) * innerR]);
-  }
-  pts.push(pts[0]);
-  return pts;
-}
-
 function taperPoints(baseR: number, mouthR: number, y0: number, y1: number, steps: number): Array<[number, number]> {
   const pts: Array<[number, number]> = [];
   for (let i = 0; i <= steps; i++) {
@@ -213,67 +220,6 @@ function insertCavityProfile(p: Dims): Array<[number, number]> {
   return closeProfile(pts);
 }
 
-function belowZeroCutter(): Manifold {
-  const { Manifold } = getEngine();
-  const big = 800;
-  return Manifold.cube([big, big, big], false).translate(-big / 2, -big / 2, -big);
-}
-
-function buildBody(p: Dims): Manifold {
-  const { Manifold } = getEngine();
-  const h = p.bodyH + p.extraTop + p.extraBot;
-  let body = Manifold.cylinder(h, p.rx, p.rx, 80).translate(0, 0, -p.extraBot);
-  if (p.rim > 0.4) {
-    const lip = Manifold.cylinder(p.rim * 0.55, p.rx + 0.15, p.rx - p.rim * 0.15, 80).translate(0, 0, p.bodyH);
-    const withLip = body.add(lip);
-    body.delete();
-    lip.delete();
-    body = withLip;
-  }
-
-  let taper = revolve(pocketTaperProfile(p, p.extraDepth), 64);
-  let bore = Manifold.cylinder(p.lipT + 5, p.pocketLipR, p.pocketLipR, 64).translate(0, 0, p.insertHeight);
-  const pocket = taper.add(bore);
-  taper.delete();
-  bore.delete();
-  const placed = pocket.translate(0, 0, p.bodyH - p.lipZ);
-  pocket.delete();
-  const hollow = body.subtract(placed);
-  body.delete();
-  placed.delete();
-  return hollow;
-}
-
-function applyTiltAndSeat(solid: Manifold, p: Dims): Manifold {
-  const tilted = solid.rotate(p.tilt, 0, 0);
-  if (tilted !== solid) solid.delete();
-  const cutter = belowZeroCutter();
-  const seated = tilted.subtract(cutter);
-  tilted.delete();
-  cutter.delete();
-  return seated.translate(0, 0, p.zShoulder);
-}
-
-function cutSocket(body: Manifold, p: Dims): Manifold {
-  const { Manifold } = getEngine();
-  const socket = Manifold.cylinder(p.pegH + 2.8, p.socketR, p.socketR, 64).translate(0, 0, p.zShoulder - 0.4);
-  const cut = body.subtract(socket);
-  body.delete();
-  socket.delete();
-  return cut;
-}
-
-function buildInsert(p: Dims): Manifold {
-  let outer = revolve(insertOuterSolidProfile(p), 64);
-  const cavity = revolve(insertCavityProfile(p), 64);
-  const shell = outer.subtract(cavity);
-  outer.delete();
-  cavity.delete();
-  const atTop = shell.translate(0, 0, p.bodyH - p.lipZ);
-  if (atTop !== shell) shell.delete();
-  return applyTiltAndSeat(atTop, p);
-}
-
 function ringCyl(height: number, innerR: number, outerR: number, z0: number): Manifold {
   const { Manifold } = getEngine();
   const outer = Manifold.cylinder(height, outerR, outerR, 80).translate(0, 0, z0);
@@ -284,65 +230,209 @@ function ringCyl(height: number, innerR: number, outerR: number, z0: number): Ma
   return ring;
 }
 
-function buildTray(params: BowlParams, p: Dims): Manifold {
-  const { Manifold, CrossSection } = getEngine();
-  const innerWall = Math.max(p.islandR + 2.5, p.trayR - p.wall);
-  const waterTop = p.floorT + (params.moatEnabled ? p.moatDepth : 0);
-  const dishTop = Math.max(p.trayH, waterTop + 2.2);
-  let tray = Manifold.cylinder(dishTop, p.trayR, p.trayR, 80);
+/** Rotate around X so the front (−Y) side of a z=0 plane drops. */
+function tiltAroundX(solid: Manifold, tiltDeg: number): Manifold {
+  if (Math.abs(tiltDeg) < 0.05) return solid;
+  const tilted = solid.rotate(tiltDeg, 0, 0);
+  if (tilted !== solid) solid.delete();
+  return tilted;
+}
 
-  if (p.islandH > dishTop + 0.2) {
-    const cap = Manifold.cylinder(p.islandH - dishTop, p.islandR, p.islandR, 72).translate(0, 0, dishTop);
-    const withCap = tray.add(cap);
+function cutTiltedTop(solid: Manifold, p: Dims): Manifold {
+  const { Manifold } = getEngine();
+  const big = 700;
+  let cutter = Manifold.cube([big, big, big], true).translate(0, 0, big / 2 + 0.02);
+  cutter = tiltAroundX(cutter, p.tilt);
+  const placed = cutter.translate(0, 0, p.bodyH);
+  if (placed !== cutter) cutter.delete();
+  const cut = solid.subtract(placed);
+  solid.delete();
+  placed.delete();
+  return cut;
+}
+
+function placeOnTiltedFace(solid: Manifold, p: Dims): Manifold {
+  const tilted = tiltAroundX(solid, p.tilt);
+  return tilted.translate(0, 0, p.bodyH);
+}
+
+function easeSmooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+function bodyOuterProfile(p: Dims): Array<[number, number]> {
+  const fillet = Math.max(8, p.rim);
+  const zFillet = p.bodyH - fillet;
+  const zWaist0 = p.neckH;
+  const zWaist1 = Math.min(p.neckH + p.waistH, zFillet - 6);
+  const pts: Array<[number, number]> = [
+    [0, 0],
+    [p.neckR, 0],
+    [p.neckR, zWaist0],
+  ];
+  const waistSteps = 10;
+  for (let i = 1; i <= waistSteps; i++) {
+    const t = i / waistSteps;
+    pts.push([p.neckR + (p.rx - p.neckR) * easeSmooth(t), zWaist0 + (zWaist1 - zWaist0) * t]);
+  }
+  if (zFillet > zWaist1 + 1) {
+    pts.push(...taperPoints(p.rx, p.topR, zWaist1, zFillet, 8));
+  }
+  const steps = 12;
+  for (let i = 1; i <= steps; i++) {
+    const a = (i / steps) * (Math.PI / 2);
+    pts.push([p.topR - fillet + fillet * Math.cos(a), zFillet + fillet * Math.sin(a)]);
+  }
+  pts.push([0, p.bodyH + 0.15]);
+  return closeProfile(pts);
+}
+
+function bodyCavityProfile(p: Dims): Array<[number, number]> {
+  const innerNeck = Math.max(p.socketR + 1, p.neckR - p.wall);
+  const innerBase = Math.max(innerNeck + 1, p.rx - p.wall);
+  const innerTop = Math.max(innerNeck + 1, p.topR - p.wall);
+  const zFloor = p.socketH + p.bottom;
+  const zWaist0 = p.neckH;
+  const zWaist1 = Math.min(p.neckH + p.waistH, p.bodyH - 8);
+  const pts: Array<[number, number]> = [
+    [0, 0],
+    [p.socketR, 0],
+    [p.socketR, p.socketH],
+    [innerNeck, zFloor],
+    [innerNeck, Math.max(zFloor, zWaist0)],
+  ];
+  const waistSteps = 8;
+  for (let i = 1; i <= waistSteps; i++) {
+    const t = i / waistSteps;
+    pts.push([innerNeck + (innerBase - innerNeck) * easeSmooth(t), zWaist0 + (zWaist1 - zWaist0) * t]);
+  }
+  pts.push(...taperPoints(innerBase, innerTop, zWaist1, p.bodyH + 12, 8));
+  pts.push([0, p.bodyH + 12]);
+  return closeProfile(pts);
+}
+
+function buildBody(p: Dims): Manifold {
+  const { Manifold } = getEngine();
+  let body = revolve(bodyOuterProfile(p), 80);
+  const cavity = revolve(bodyCavityProfile(p), 72);
+  const hollow = body.subtract(cavity);
+  body.delete();
+  cavity.delete();
+  body = hollow;
+
+  body = cutTiltedTop(body, p);
+
+  const lidInner = Math.max(p.pocketMouthR + 1, p.pocketLipR - 1.2);
+  const lid = ringCyl(p.wall + 0.6, lidInner, p.topR - 0.2, -(p.wall + 0.4));
+  const seatedLid = placeOnTiltedFace(lid, p);
+  const withLid = body.add(seatedLid);
+  body.delete();
+  seatedLid.delete();
+  body = withLid;
+
+  let taper = revolve(pocketTaperProfile(p, p.extraDepth), 64);
+  let bore = Manifold.cylinder(p.lipT + 6, p.pocketLipR, p.pocketLipR, 64).translate(0, 0, p.insertHeight - 0.2);
+  const pocket = taper.add(bore);
+  taper.delete();
+  bore.delete();
+  const well = Manifold.cylinder(8, Math.max(p.pocketLipR, p.pocketMouthR + 2), Math.max(p.pocketLipR, p.pocketMouthR + 2), 64).translate(
+    0,
+    0,
+    p.insertHeight,
+  );
+  const withWell = pocket.add(well);
+  pocket.delete();
+  well.delete();
+  const pocketAtFace = withWell.translate(0, 0, -p.insertHeight);
+  if (pocketAtFace !== withWell) withWell.delete();
+  const placed = placeOnTiltedFace(pocketAtFace, p);
+  const opened = body.subtract(placed);
+  body.delete();
+  placed.delete();
+  return opened.translate(0, 0, p.zShoulder);
+}
+
+function buildInsert(p: Dims): Manifold {
+  let outer = revolve(insertOuterSolidProfile(p), 64);
+  const cavity = revolve(insertCavityProfile(p), 64);
+  const shell = outer.subtract(cavity);
+  outer.delete();
+  cavity.delete();
+  const atFace = shell.translate(0, 0, -p.insertHeight);
+  if (atFace !== shell) shell.delete();
+  const placed = placeOnTiltedFace(atFace, p);
+  return placed.translate(0, 0, p.zShoulder);
+}
+
+function buildTray(params: BowlParams, p: Dims): Manifold {
+  const { Manifold } = getEngine();
+  const wallInner = p.wallInner;
+  const rim = Math.max(5.5, Math.min(9, p.rimT * 0.72));
+  const floorZ = p.floorT;
+
+  const islandPts: Array<[number, number]> = [
+    [0, 0],
+    [p.islandR * 0.64, 0],
+  ];
+  islandPts.push(...taperPoints(p.islandR * 0.64, p.islandR, 0, p.islandH, 10));
+  islandPts.push([p.islandR, p.islandH], [0, p.islandH]);
+  let tray = revolve(closeProfile(islandPts), 72);
+
+  const wallH = p.trayH;
+  const wall = ringCyl(wallH - floorZ + 0.2, wallInner, p.trayR, floorZ);
+  const withWall = tray.add(wall);
+  tray.delete();
+  wall.delete();
+  tray = withWall;
+
+  const floor = ringCyl(floorZ + 0.4, p.islandR - 0.2, p.trayR, -0.1);
+  const withFloor = tray.add(floor);
+  tray.delete();
+  floor.delete();
+  tray = withFloor;
+
+  if (rim > 1) {
+    const { CrossSection } = getEngine();
+    const bead = CrossSection.circle(rim * 0.68, 24).translate(p.trayR - rim * 0.22, 0);
+    const torus = bead.revolve(64);
+    bead.delete();
+    const lip = torus.translate(0, 0, wallH - rim * 0.2);
+    torus.delete();
+    const withLip = tray.add(lip);
     tray.delete();
-    cap.delete();
-    tray = withCap;
+    lip.delete();
+    tray = withLip;
   }
 
-  const cavH = Math.max(2, dishTop - waterTop + 1.2);
-  const cavity = ringCyl(cavH, p.islandR, innerWall, waterTop);
-  const hollow = tray.subtract(cavity);
-  tray.delete();
-  cavity.delete();
-  tray = hollow;
-
   if (params.moatEnabled && p.moatOuter > p.moatInner + 0.8) {
-    const channel = ringCyl(p.moatDepth + 0.15, p.moatInner, p.moatOuter, p.floorT);
+    const waterTop = Math.min(p.islandH - 1.2, floorZ + p.moatDepth);
+    const channel = ringCyl(waterTop - floorZ + 0.2, p.moatInner, Math.min(p.moatOuter, wallInner - 0.6), floorZ);
     const cut = tray.subtract(channel);
     tray.delete();
     channel.delete();
     tray = cut;
+  } else {
+    const dish = ringCyl(p.islandH - floorZ, p.islandR + 0.4, wallInner, floorZ);
+    const cut = tray.subtract(dish);
+    tray.delete();
+    dish.delete();
+    tray = cut;
   }
 
-  const peg = Manifold.cylinder(p.pegH, p.pegR, p.pegR, 64).translate(0, 0, p.islandH);
-  const withPeg = tray.add(peg);
-  tray.delete();
-  peg.delete();
-  tray = withPeg;
+  if (p.pegH > 0.4) {
+    const peg = Manifold.cylinder(p.pegH, p.pegR, p.pegR, 64).translate(0, 0, p.islandH);
+    const withPeg = tray.add(peg);
+    tray.delete();
+    peg.delete();
+    tray = withPeg;
+  }
 
   if (params.antiSlipGroove) {
-    const groove = ringCyl(1.4, Math.max(8, p.trayR - 6.2), p.trayR - 2.1, -0.15);
+    const groove = ringCyl(1.2, Math.max(8, p.islandR * 0.55), p.islandR * 0.78, -0.15);
     const grooved = tray.subtract(groove);
     tray.delete();
     groove.delete();
     tray = grooved;
-  }
-
-  if (params.baseTexture !== "smooth") {
-    const ring = toothedRing(p.trayR + 1.15, p.trayR + 0.12, params.ribCount);
-    const teeth = new CrossSection([ring]);
-    const hole = CrossSection.circle(p.trayR + 0.06, 80);
-    const band = teeth.subtract(hole);
-    teeth.delete();
-    hole.delete();
-    const twist = params.baseTexture === "twist" ? 22 : 0;
-    const divisions = params.baseTexture === "twist" ? 10 : 0;
-    const ribs = band.extrude(Math.max(6, p.trayH - 1), divisions, twist);
-    band.delete();
-    const combined = tray.add(ribs);
-    tray.delete();
-    ribs.delete();
-    tray = combined;
   }
   return tray;
 }
@@ -355,10 +445,21 @@ function buildDecor(
   const layout = layoutDecorations(font, params.text, params.textLine2, params.fontSize, params.icons);
   if (!layout.polygons.length) return { cutter: null, inlay: null, warnings: layout.warnings };
   const depth = clamp(params.embossDepth, 0.4, 4);
-  const zMid = Math.max(p.bodyH * 0.55, p.pegH + 14);
+  const visibleLow = Math.max(p.zWaist1, p.trayH) + 8;
+  const visibleHigh = p.zFront - 10;
+  const zMid = visibleLow + Math.max(16, (visibleHigh - visibleLow) * 0.48);
+  const taperSpan = Math.max(1, p.zFootTop + p.bodyH - Math.max(8, p.rim) - p.zWaist1);
+  const wrapR = p.rx + (p.topR - p.rx) * clamp((zMid - p.zWaist1) / taperSpan, 0, 1);
   const engrave = params.textStyle !== "emboss";
-  const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, p.rx, depth + 0.45, zMid, 0.12) : null;
-  const inlay = wrapPolygonsToCylinder(layout.polygons, p.rx, depth + (engrave ? 0.05 : 0.15), zMid, engrave ? 0.02 : 0.35);
+  const cutter = engrave ? wrapPolygonsToCylinder(layout.polygons, wrapR, depth + 0.45, zMid, 0.08, p.wrapTaper) : null;
+  const inlay = wrapPolygonsToCylinder(
+    layout.polygons,
+    wrapR,
+    depth + (engrave ? 0.05 : 0.15),
+    zMid,
+    engrave ? 0.02 : 0.35,
+    p.wrapTaper,
+  );
   return { cutter, inlay, warnings: layout.warnings };
 }
 
@@ -410,12 +511,9 @@ export async function buildBowl(params: BowlParams = DEFAULT_PARAMS, font: Font 
     decor.cutter.delete();
   }
 
-  body = applyTiltAndSeat(body, p);
-  body = cutSocket(body, p);
-
   let text: Manifold | null = null;
   if (decor.inlay) {
-    text = applyTiltAndSeat(decor.inlay, p);
+    text = decor.inlay;
   }
 
   const tray = buildTray(params, p);
