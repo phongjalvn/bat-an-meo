@@ -21,7 +21,7 @@ import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
 
 const SIZE_KEYS = ["bodyDiameter", "height", "rimRadius"] as const;
-const STRUCT_KEYS = ["wallThickness", "bottomThickness", "mouthShrink", "footHeight", "insertClearance"] as const;
+const STRUCT_KEYS = ["wallThickness", "bottomThickness", "footHeight", "insertClearance"] as const;
 const CATCARE_KEYS = ["standHeight", "tiltDeg"] as const;
 const MOAT_KEYS = ["moatWidth", "moatDepth", "moatDistance"] as const;
 const CUSTOM_INSERT_KEYS = [
@@ -44,6 +44,7 @@ export class App {
   private activeId: string | null = null;
   private rebuildTimer = 0;
   private leftTab: "design" | "presets" = "design";
+  private view: CameraView = "3d";
   private open: Record<string, boolean> = {
     size: true,
     structure: true,
@@ -117,7 +118,7 @@ export class App {
               <p>${L("viewportSub")}</p>
             </div>
             <div class="view-switch">
-              ${(["3d", "front", "top", "side"] as CameraView[]).map((v) => `<button data-view="${v}">${L(viewKey(v))}</button>`).join("")}
+              ${(["3d", "front", "top", "side"] as CameraView[]).map((v) => `<button data-view="${v}" class="${this.view === v ? "active" : ""}">${L(viewKey(v))}</button>`).join("")}
             </div>
             <div class="zoom">
               <button id="zoom-in">+</button>
@@ -425,7 +426,11 @@ export class App {
     });
     document.querySelectorAll("[data-view]").forEach((el) => {
       el.addEventListener("click", () => {
-        this.viewer?.setView((el as HTMLElement).dataset.view as CameraView, this.model ?? undefined);
+        this.view = (el as HTMLElement).dataset.view as CameraView;
+        this.viewer?.setView(this.view, this.model ?? undefined);
+        document.querySelectorAll("[data-view]").forEach((btn) => {
+          btn.classList.toggle("active", (btn as HTMLElement).dataset.view === this.view);
+        });
       });
     });
     q("#zoom-in")?.addEventListener("click", () => this.viewer?.zoom(1));
@@ -514,7 +519,10 @@ export class App {
     if (tris) tris.textContent = `${L("triangles")}: ${this.model.triangleCount.toLocaleString()}`;
     const mass = estimateMassGrams(this.model.solidVolumeMm3, this.material.density);
     const massEl = document.querySelector("#mass");
-    if (massEl) massEl.innerHTML = `${mass.toFixed(0)} <small>g</small>`;
+    if (massEl) {
+      const shown = Math.round(mass).toLocaleString(this.locale === "vi" ? "vi-VN" : "en-US");
+      massEl.innerHTML = `${shown} <small>g</small>`;
+    }
     const cap = document.querySelector("#capacity");
     if (cap) cap.textContent = `${L("capacity")}: ${this.model.capacityMl.toFixed(0)} ml`;
     const water = document.querySelector("#moat-water");

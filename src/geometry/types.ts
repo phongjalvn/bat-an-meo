@@ -197,7 +197,11 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   }
   next.innerDepth = next.insertHeight;
   next.bodyDiameter = Math.max(next.bodyDiameter, minHolderDiameter(next));
-  next.height = Math.max(next.height, next.insertHeight + next.bottomThickness + 12);
+  const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
+  const lipZ = next.insertHeight + next.insertLipThickness;
+  const lipR = next.insertLipDiameter / 2 + next.insertClearance;
+  const minH = Math.ceil((lipZ + 0.8) * Math.cos(tiltRad) + next.bottomThickness + lipR * Math.sin(tiltRad) + 2);
+  next.height = Math.max(next.height, minH);
   return next;
 }
 

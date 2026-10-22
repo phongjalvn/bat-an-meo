@@ -61,10 +61,11 @@ export function resolvedDims(params: BowlParams) {
   const pocketMouthR = mouthOuterR + clearance;
   const pocketBaseR = baseR + clearance;
   const pocketLipR = lipR + clearance;
-  const insertDepth = insertHeight;
-  const openingR = pocketMouthR;
-  const pocketR = pocketMouthR;
-  const bottomR = baseR;
+  const lipZ = insertHeight + lipT;
+  const tiltSin = Math.sin(tiltRad);
+  const tiltCos = Math.max(0.72, Math.cos(tiltRad));
+  const maxStem = (bodyH - bottom - pocketLipR * tiltSin) / tiltCos;
+  const extraDepth = Math.max(0.8, maxStem - lipZ);
   const footR = rx;
   const moatWidth = clamp(params.moatWidth, 8, 40);
   const moatDepth = clamp(params.moatDepth, 6, 22);
@@ -88,7 +89,8 @@ export function resolvedDims(params: BowlParams) {
     baseR,
     lipR,
     insertHeight,
-    insertDepth,
+    lipZ,
+    extraDepth,
     pocketMouthR,
     pocketBaseR,
     pocketLipR,
@@ -97,9 +99,6 @@ export function resolvedDims(params: BowlParams) {
     drop,
     zFootTop,
     zRimCenter,
-    openingR,
-    pocketR,
-    bottomR,
     footR,
     moatWidth,
     moatDepth,
@@ -239,8 +238,8 @@ function buildBody(p: Dims): Manifold {
   cutter.delete();
   body = trimmed;
 
-  const lipZ = p.insertHeight + p.lipT;
-  let taper = revolve(pocketTaperProfile(p, 0.8), 64);
+  const lipZ = p.lipZ;
+  let taper = revolve(pocketTaperProfile(p, p.extraDepth), 64);
   const { Manifold } = getEngine();
   let bore = Manifold.cylinder(p.lipT + 5, p.pocketLipR, p.pocketLipR, 64).translate(0, 0, p.insertHeight);
   const pocket = taper.add(bore);
@@ -260,7 +259,9 @@ function buildInsert(p: Dims): Manifold {
   const shell = outer.subtract(cavity);
   outer.delete();
   cavity.delete();
-  return placeOnRim(shell, p, p.insertHeight + p.lipT);
+  const placed = placeOnRim(shell, p, p.lipZ);
+  if (placed !== shell) shell.delete();
+  return placed;
 }
 
 function buildStand(params: BowlParams, p: Dims): Manifold {

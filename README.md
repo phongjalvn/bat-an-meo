@@ -9,7 +9,7 @@ The holder is a straight-walled cylinder with a recessed pocket for a removable 
 - Live 3D preview with orbit, front/top/side cameras, zoom, and a reference plate that is not exported
 - Stainless insert sizes from the real bowls: **Nhỏ 11 cm** (lip 130 / mouth 110 / base 70 / height 40 mm) and **Lớn 16 cm** (lip 190 / mouth 160 / base 95 / height 55 mm), plus Custom for those four measurements
 - Pocket follows the tapered bowl plus clearance, with a shallow counterbore for the rolled rim lip; holder outer diameter is at least lip + 2× wall
-- Design sliders for size, wall/bottom thickness, mouth shrink, foot height, rounded rim, stand height, 0–15° cat tilt, optional double bowl, anti-slip groove
+- Design sliders for size, wall/bottom thickness, foot height, rounded rim, stand height, 0–15° cat tilt, optional double bowl, anti-slip groove
 - Anti-hunch (raised stand + slanted top, tilt toward the front) and anti-ant annular water moat
 - Embossed body text with Vietnamese diacritics
 - Base textures: smooth, vertical ribs, twisted ribs
@@ -74,7 +74,7 @@ GITHUB_PAGES=true npm run build
 
 ## Limitations
 
-- Text sits on a tangent plane rather than being fully projected onto the sphere.
+- Text sits on a tangent plane on the cylinder wall rather than wrapping around it.
 - Plate thumbnails in the 3MF are placeholder PNGs, not rendered previews.
 - Bambu export targets a P1S 0.4 mm profile; pick your actual printer after opening the file if needed.
 - Manifold generation is heavier than a simple preview mesh, so sliders are debounced.

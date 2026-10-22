@@ -128,6 +128,16 @@ describe("stainless insert sizes", () => {
     expect(model.manifold).toBe(true);
   });
 
+  it("keeps a bottom floor under a tilted pocket so the insert cannot punch through", () => {
+    const care = PRESETS.find((p) => p.id === "cat-care")!.params;
+    const p = resolvedDims(care);
+    const stem = p.extraDepth + p.insertHeight + p.lipT;
+    const frontZ = p.zRimCenter - p.pocketLipR * Math.sin(p.tiltRad) - stem * Math.cos(p.tiltRad);
+    expect(p.extraDepth).toBeGreaterThanOrEqual(0.8);
+    expect(frontZ).toBeGreaterThanOrEqual(p.zFootTop + p.bottom - 0.6);
+    expect(p.bottom).toBeGreaterThanOrEqual(1.6);
+  });
+
   it("uses Small 11 cm on cat presets and Large 16 cm on dog presets", () => {
     const cat = PRESETS.find((p) => p.id === "small-cat")!;
     const dog = PRESETS.find((p) => p.id === "medium-dog")!;
