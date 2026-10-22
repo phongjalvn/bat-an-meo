@@ -29,6 +29,7 @@ describe("default pet bowl export", () => {
     expect(model.insertMouthMm).toBe(110);
     expect(model.insertBaseMm).toBe(70);
     expect(model.insertHeightMm).toBe(40);
+    expect(model.insert?.positions.length).toBeGreaterThan(300);
     expect(model.parts.some((p) => p.name === "moat")).toBe(false);
 
     for (const part of model.parts) {
@@ -39,7 +40,7 @@ describe("default pet bowl export", () => {
     expect(stl.byteLength).toBeGreaterThan(84 + 50);
     const triCount = new DataView(stl.buffer, stl.byteOffset, stl.byteLength).getUint32(80, true);
     expect(triCount).toBeGreaterThan(100);
-    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h72_w3p0_i130(_Bé-Mèo)?/);
+    expect(exportFileStem(DEFAULT_PARAMS)).toMatch(/bowl_d150_h60_w3p0_i130(_Bé-Mèo)?/);
   });
 
   it("exports Bambu Lab and Snapmaker U1 3MF projects with part-to-filament mapping", async () => {

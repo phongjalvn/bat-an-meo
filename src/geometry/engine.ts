@@ -186,25 +186,25 @@ function pocketTaperProfile(p: Dims, extraDepth: number): Array<[number, number]
   return closeProfile(pts);
 }
 
-function insertShellProfile(p: Dims): Array<[number, number]> {
+function insertOuterSolidProfile(p: Dims): Array<[number, number]> {
+  const depth = p.insertHeight;
+  const pts: Array<[number, number]> = [[0, 0]];
+  pts.push(...taperPoints(p.baseR, p.mouthOuterR, 0, depth, 10));
+  pts.push([p.lipR, depth]);
+  pts.push([p.lipR, depth + p.lipT]);
+  pts.push([0, depth + p.lipT]);
+  return closeProfile(pts);
+}
+
+function insertCavityProfile(p: Dims): Array<[number, number]> {
   const steel = p.steel;
   const depth = p.insertHeight;
   const innerBase = Math.max(6, p.baseR - steel);
   const innerMouth = p.mouthInner / 2;
-  const outerBase = p.baseR;
-  const outerMouth = p.mouthOuterR;
-  const rimR = p.lipR;
-  const pts: Array<[number, number]> = [];
-  pts.push([innerBase, steel]);
+  const pts: Array<[number, number]> = [[0, steel]];
   pts.push(...taperPoints(innerBase, innerMouth, steel, depth, 10));
-  pts.push([innerMouth, depth + p.lipT - 0.12]);
-  pts.push([rimR - 0.35, depth + p.lipT]);
-  pts.push([rimR, depth + p.lipT]);
-  pts.push([rimR, depth]);
-  pts.push([outerMouth, depth]);
-  const outer = taperPoints(outerBase, outerMouth, 0, depth, 10);
-  for (let i = outer.length - 1; i >= 0; i--) pts.push(outer[i]);
-  pts.push([innerBase, steel]);
+  pts.push([innerMouth, depth + p.lipT + 1]);
+  pts.push([0, depth + p.lipT + 1]);
   return closeProfile(pts);
 }
 
@@ -255,9 +255,12 @@ function buildBody(p: Dims): Manifold {
 }
 
 function buildInsert(p: Dims): Manifold {
-  let insert = revolve(insertShellProfile(p), 64);
-  insert = placeOnRim(insert, p, p.insertHeight + p.lipT);
-  return insert;
+  let outer = revolve(insertOuterSolidProfile(p), 64);
+  const cavity = revolve(insertCavityProfile(p), 64);
+  const shell = outer.subtract(cavity);
+  outer.delete();
+  cavity.delete();
+  return placeOnRim(shell, p, p.insertHeight + p.lipT);
 }
 
 function buildStand(params: BowlParams, p: Dims): Manifold {

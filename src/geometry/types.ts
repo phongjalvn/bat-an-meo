@@ -75,7 +75,7 @@ export const PARAM_LIMITS = {
 
 export const DEFAULT_PARAMS: BowlParams = {
   bodyDiameter: 150,
-  height: 72,
+  height: 60,
   innerDepth: 40,
   wallThickness: 3,
   bottomThickness: 3,
@@ -197,7 +197,7 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
   }
   next.innerDepth = next.insertHeight;
   next.bodyDiameter = Math.max(next.bodyDiameter, minHolderDiameter(next));
-  next.height = Math.max(next.height, next.insertHeight + next.bottomThickness + 16);
+  next.height = Math.max(next.height, next.insertHeight + next.bottomThickness + 12);
   return next;
 }
 
