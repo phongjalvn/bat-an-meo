@@ -4,3 +4,6 @@ dist
 *.local
 .vite
 coverage
+public/ref
+scripts/analyze-ref.mjs
+scripts/volumes.mjs

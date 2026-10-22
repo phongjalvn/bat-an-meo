@@ -113,15 +113,7 @@ export function layoutDecorations(
   const line1 = text.trim();
   const line2 = textLine2.trim();
   let name: Polygon[] = [];
-  if (font && line1) name = fontPolygons(font, line1, fontSize);
-  if (font && line2) {
-    const second = fontPolygons(font, line2, Math.max(8, fontSize * 0.62));
-    const firstBox = boundsOf(name);
-    const gap = fontSize * 0.28;
-    const shifted = translatePolygons(second, 0, firstBox.minY - gap - 0.01);
-    name = [...name, ...shifted];
-  }
-  if (name.length) name = centerPolygons(name);
+  if (font && line1) name = centerPolygons(fontPolygons(font, line1, fontSize));
   const nameBox = boundsOf(name);
 
   for (const icon of icons) {
@@ -152,6 +144,19 @@ export function layoutDecorations(
     parts.push(...translatePolygons(shaped, dx, dy));
   }
 
-  const combined = centerPolygons([...name, ...parts]);
+  let stacked = [...name, ...parts];
+  if (font && line2) {
+    const second = centerPolygons(fontPolygons(font, line2, Math.max(7, fontSize * 0.38)));
+    const nameBottom = name.length ? nameBox.minY : boundsOf(parts).minY;
+    const secondBox = boundsOf(second);
+    const gap = fontSize * 0.18;
+    stacked = [
+      ...name,
+      ...parts,
+      ...translatePolygons(second, 0, nameBottom - gap - (secondBox.maxY - secondBox.minY) / 2),
+    ];
+  }
+
+  const combined = centerPolygons(stacked);
   return { polygons: combined, warnings };
 }

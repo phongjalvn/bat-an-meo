@@ -27,7 +27,7 @@ import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
 
-const SIZE_KEYS = ["bodyDiameter", "height", "trayDiameter", "trayHeight", "rimRadius"] as const;
+const SIZE_KEYS = ["bodyDiameter", "height", "mouthShrink", "trayDiameter", "trayHeight", "rimRadius"] as const;
 const STRUCT_KEYS = ["wallThickness", "bottomThickness", "islandHeight", "insertClearance", "fitClearance"] as const;
 const CATCARE_KEYS = ["tiltDeg"] as const;
 const MOAT_KEYS = ["moatWidth", "moatDepth", "moatGap"] as const;
