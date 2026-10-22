@@ -1,6 +1,6 @@
 import JSZip from "jszip";
 import type { BowlModel, BowlPart } from "../geometry/types";
-import { FILAMENT_COLORS } from "../geometry/types";
+import { FILAMENT_COLORS, extruderOf } from "../geometry/types";
 import u1Settings from "./templates/u1-project-settings.json";
 import { miniPng } from "./png";
 
@@ -261,7 +261,7 @@ export async function buildThreeMf(model: BowlModel, target: ThreeMfTarget): Pro
   const assemblyId = 2;
   const metas: ThreeMfPartMeta[] = model.parts.map((part, index) => {
     const componentId = index * 2 + 1;
-    const extruder = part.name === "body" ? 1 : part.name === "base" ? 2 : 3;
+    const extruder = extruderOf(part.name);
     return {
       name: part.name,
       objectId: assemblyId,

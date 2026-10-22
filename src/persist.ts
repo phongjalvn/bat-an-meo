@@ -1,4 +1,4 @@
-import { DEFAULT_PARAMS, type BowlParams } from "./geometry/types";
+import { DEFAULT_PARAMS, normalizeParams, type BowlParams } from "./geometry/types";
 
 export interface SavedProject {
   id: string;
@@ -15,7 +15,8 @@ export function loadProjects(): SavedProject[] {
     const raw = localStorage.getItem(KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as SavedProject[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((project) => ({ ...project, params: normalizeParams(project.params) }));
   } catch {
     return [];
   }

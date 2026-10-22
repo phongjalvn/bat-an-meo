@@ -1,5 +1,15 @@
 import type { Font } from "opentype.js";
-import { DEFAULT_PARAMS, MATERIALS, PARAM_LIMITS, type BowlParams, type Locale } from "./geometry/types";
+import {
+  DEFAULT_PARAMS,
+  MATERIALS,
+  PARAM_LIMITS,
+  applyInsertSize,
+  minHolderDiameter,
+  normalizeParams,
+  type BowlParams,
+  type InsertSizeId,
+  type Locale,
+} from "./geometry/types";
 import { buildBowl, estimateMassGrams, initEngine } from "./geometry/engine";
 import type { BowlModel } from "./geometry/types";
 import { t, type StringKey } from "./i18n/strings";
@@ -10,8 +20,16 @@ import { exportFileStem, modelToBinaryStl } from "./export/stl";
 import { buildThreeMf, type ThreeMfTarget } from "./export/threemf";
 import { loadAppFont } from "./font";
 
-const SIZE_KEYS = ["bodyDiameter", "height", "innerDepth", "rimRadius", "tiltDeg"] as const;
-const STRUCT_KEYS = ["wallThickness", "bottomThickness", "mouthShrink", "footHeight"] as const;
+const SIZE_KEYS = ["bodyDiameter", "height", "rimRadius"] as const;
+const STRUCT_KEYS = ["wallThickness", "bottomThickness", "mouthShrink", "footHeight", "insertClearance"] as const;
+const CATCARE_KEYS = ["standHeight", "tiltDeg"] as const;
+const MOAT_KEYS = ["moatWidth", "moatDepth", "moatDistance"] as const;
+const CUSTOM_INSERT_KEYS = [
+  "insertLipDiameter",
+  "insertMouthDiameter",
+  "insertBaseDiameter",
+  "insertHeight",
+] as const;
 
 export class App {
   private locale: Locale = "vi";
@@ -26,15 +44,23 @@ export class App {
   private activeId: string | null = null;
   private rebuildTimer = 0;
   private leftTab: "design" | "presets" = "design";
-  private open: Record<string, boolean> = { size: true, structure: true, personalize: true, texture: true };
+  private open: Record<string, boolean> = {
+    size: true,
+    structure: true,
+    catCare: true,
+    personalize: true,
+    texture: true,
+  };
 
   async start() {
     this.projects = typeof localStorage !== "undefined" ? loadProjects() : [];
     this.activeId = typeof localStorage !== "undefined" ? loadActiveId() : null;
     const current = this.projects.find((p) => p.id === this.activeId);
     if (current) {
-      this.params = { ...current.params };
+      this.params = normalizeParams(current.params);
       this.projectName = current.name;
+    } else {
+      this.params = normalizeParams(DEFAULT_PARAMS);
     }
     this.render();
     await initEngine();
@@ -126,10 +152,49 @@ export class App {
 
   private designPanel(): string {
     const L = (key: StringKey) => t(this.locale, key);
+    const custom = this.params.insertSize === "custom";
     return `
-      ${section("size", L("size"), this.open.size, SIZE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") + this.toggle("doubleBowl", L("doubleBowl")))}
-      ${section("structure", L("structure"), this.open.structure, STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") + this.toggle("antiSlipGroove", L("antiSlip")))}
-      ${section("personalize", L("personalize"), this.open.personalize, `
+      ${section(
+        "size",
+        L("size"),
+        this.open.size,
+        `
+        <div class="field">
+          <label>${L("insertBowl")}</label>
+          <div class="segs">
+            ${(["small", "large", "custom"] as InsertSizeId[])
+              .map((id) => {
+                const label = id === "small" ? L("insertSmall") : id === "large" ? L("insertLarge") : L("insertCustom");
+                return `<button class="seg ${this.params.insertSize === id ? "active" : ""}" data-insert="${id}">${label}</button>`;
+              })
+              .join("")}
+          </div>
+          <div class="hint">${L("insertHint")}</div>
+        </div>
+        ${custom ? CUSTOM_INSERT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""}
+        ${SIZE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("")}
+        ${this.toggle("doubleBowl", L("doubleBowl"))}
+      `,
+      )}
+      ${section(
+        "structure",
+        L("structure"),
+        this.open.structure,
+        STRUCT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") + this.toggle("antiSlipGroove", L("antiSlip")),
+      )}
+      ${section(
+        "catCare",
+        L("catCare"),
+        this.open.catCare,
+        CATCARE_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") +
+          this.toggle("moatEnabled", L("moatEnabled")) +
+          (this.params.moatEnabled ? MOAT_KEYS.map((key) => this.slider(key, L(labelFor(key)))).join("") : ""),
+      )}
+      ${section(
+        "personalize",
+        L("personalize"),
+        this.open.personalize,
+        `
         <div class="field">
           <label>${L("bodyText")}</label>
           <input class="text-input" id="text" maxlength="24" value="${escapeHtml(this.params.text)}" />
@@ -137,25 +202,39 @@ export class App {
         </div>
         ${this.slider("fontSize", L("fontSize"))}
         ${this.slider("embossDepth", L("embossDepth"))}
-      `)}
-      ${section("texture", L("baseTexture"), this.open.texture, `
+      `,
+      )}
+      ${section(
+        "texture",
+        L("baseTexture"),
+        this.open.texture,
+        `
         <div class="pills">
           ${(["smooth", "ribs", "twist"] as const).map((id) => `<button class="pill ${this.params.baseTexture === id ? "active" : ""}" data-tex="${id}">${L(id)}</button>`).join("")}
         </div>
         ${this.slider("ribCount", L("ribCount"))}
-      `)}
+      `,
+      )}
     `;
   }
 
   private presetsPanel(): string {
     const L = (key: StringKey) => t(this.locale, key);
-    const names = { "small-cat": L("smallCat"), "medium-dog": L("mediumDog"), "large-dog": L("largeDog") };
-    return PRESETS.map((preset) => `
+    const names = {
+      "small-cat": L("smallCat"),
+      "medium-dog": L("mediumDog"),
+      "large-dog": L("largeDog"),
+      "cat-care": L("catCarePreset"),
+    };
+    return PRESETS.map((preset) => {
+      const rim = (preset.params.insertMouthDiameter / 10).toFixed(0);
+      return `
       <button class="preset" data-preset="${preset.id}">
         <strong>${names[preset.id]}</strong>
-        <span>${preset.params.bodyDiameter} × ${preset.params.height} mm</span>
+        <span>${preset.params.bodyDiameter} × ${preset.params.height} mm · Ø ${rim} cm</span>
       </button>
-    `).join("");
+    `;
+    }).join("");
   }
 
   private rightPanel(): string {
@@ -168,7 +247,10 @@ export class App {
         <div><i style="background:#F7F1E3"></i>${L("partBody")}</div>
         <div><i style="background:#C4A574"></i>${L("partBase")}</div>
         <div><i style="background:#6B4423"></i>${L("partText")}</div>
+        <div><i style="background:#4A90A4"></i>${L("partMoat")}</div>
+        <div><i style="background:#C5CCD3"></i>${L("partInsert")}</div>
       </div>
+      <div id="stability"></div>
       <div id="tris"></div>
       <label>${L("material")}</label>
       <select id="material">
@@ -176,13 +258,14 @@ export class App {
       </select>
       <div class="mass" id="mass"></div>
       <div id="capacity"></div>
+      <div id="moat-water"></div>
     `;
   }
 
   private slider(key: keyof typeof PARAM_LIMITS, label: string): string {
     const lim = PARAM_LIMITS[key];
     const value = this.params[key] as number;
-    const unit = key === "ribCount" || key === "tiltDeg" ? (key === "tiltDeg" ? "°" : "") : "mm";
+    const unit = key === "ribCount" ? "" : key === "tiltDeg" ? "°" : "mm";
     return `
       <div class="field">
         <label>${label}</label>
@@ -197,7 +280,7 @@ export class App {
     `;
   }
 
-  private toggle(key: "doubleBowl" | "antiSlipGroove", label: string): string {
+  private toggle(key: "doubleBowl" | "antiSlipGroove" | "moatEnabled", label: string): string {
     return `<label class="check">${label}<input type="checkbox" data-toggle="${key}" ${this.params[key] ? "checked" : ""} /></label>`;
   }
 
@@ -205,12 +288,16 @@ export class App {
     const L = (key: StringKey) => t(this.locale, key);
     return `
       <button class="btn" id="new-project">${L("newProject")}</button>
-      ${this.projects.map((p) => `
+      ${this.projects
+        .map(
+          (p) => `
         <div class="project-row">
           <button data-open="${p.id}">${escapeHtml(p.name)}</button>
           <button data-del="${p.id}">${L("deleteProject")}</button>
         </div>
-      `).join("")}
+      `,
+        )
+        .join("")}
     `;
   }
 
@@ -230,7 +317,7 @@ export class App {
       hide("#export-menu");
     });
     q("#new-project")?.addEventListener("click", () => {
-      this.params = { ...DEFAULT_PARAMS };
+      this.params = normalizeParams(DEFAULT_PARAMS);
       this.projectName = t(this.locale, "defaultProject");
       this.activeId = null;
       this.saved = false;
@@ -243,7 +330,7 @@ export class App {
         const found = this.projects.find((p) => p.id === id);
         if (!found) return;
         this.activeId = found.id;
-        this.params = { ...found.params };
+        this.params = normalizeParams(found.params);
         this.projectName = found.name;
         this.saved = true;
         setActiveId(found.id);
@@ -274,7 +361,16 @@ export class App {
         const id = (el as HTMLElement).dataset.preset;
         const preset = PRESETS.find((p) => p.id === id);
         if (!preset) return;
-        this.params = { ...preset.params };
+        this.params = normalizeParams(preset.params);
+        this.saved = false;
+        this.render();
+        void this.rebuild();
+      });
+    });
+    document.querySelectorAll("[data-insert]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const size = (el as HTMLElement).dataset.insert as InsertSizeId;
+        this.params = applyInsertSize(this.params, size);
         this.saved = false;
         this.render();
         void this.rebuild();
@@ -285,6 +381,16 @@ export class App {
         const key = (el as HTMLElement).dataset.param as keyof typeof PARAM_LIMITS;
         const value = Number((event.target as HTMLInputElement).value);
         (this.params[key] as number) = value;
+        if (
+          key === "insertLipDiameter" ||
+          key === "insertMouthDiameter" ||
+          key === "insertBaseDiameter" ||
+          key === "insertHeight"
+        ) {
+          this.params.insertSize = "custom";
+        }
+        if (key === "insertHeight") this.params.innerDepth = value;
+        this.fitHolderToInsert();
         this.saved = false;
         this.queueRebuild();
         this.syncTwinInputs(key, value);
@@ -292,9 +398,10 @@ export class App {
     });
     document.querySelectorAll("[data-toggle]").forEach((el) => {
       el.addEventListener("change", () => {
-        const key = (el as HTMLElement).dataset.toggle as "doubleBowl" | "antiSlipGroove";
+        const key = (el as HTMLElement).dataset.toggle as "doubleBowl" | "antiSlipGroove" | "moatEnabled";
         this.params[key] = (el as HTMLInputElement).checked;
         this.saved = false;
+        if (key === "moatEnabled") this.render();
         void this.rebuild();
       });
     });
@@ -337,6 +444,19 @@ export class App {
     });
   }
 
+  private fitHolderToInsert() {
+    const minD = minHolderDiameter(this.params);
+    if (this.params.bodyDiameter < minD) {
+      this.params.bodyDiameter = minD;
+      this.syncTwinInputs("bodyDiameter", minD);
+    }
+    const minH = this.params.insertHeight + this.params.bottomThickness + 16;
+    if (this.params.height < minH) {
+      this.params.height = minH;
+      this.syncTwinInputs("height", minH);
+    }
+  }
+
   private syncTwinInputs(key: string, value: number) {
     document.querySelectorAll(`[data-param="${key}"]`).forEach((el) => {
       (el as HTMLInputElement).value = String(value);
@@ -371,12 +491,24 @@ export class App {
         <div><span>${L("width")}</span><strong>${this.model.width.toFixed(1)} mm</strong></div>
         <div><span>${L("depth")}</span><strong>${this.model.depth.toFixed(1)} mm</strong></div>
         <div><span>${L("heightDim")}</span><strong>${this.model.height.toFixed(1)} mm</strong></div>
+        <div><span>${L("insertLipDiameter")}</span><strong>${this.model.insertRimMm.toFixed(0)} mm</strong></div>
+        <div><span>${L("insertMouthDiameter")}</span><strong>${this.model.insertMouthMm.toFixed(0)} mm</strong></div>
       `;
     }
     const seal = document.querySelector("#seal");
     if (seal) {
       seal.className = `badge ${this.model.manifold ? "" : "bad"}`;
       seal.textContent = this.model.manifold ? "✓ " + L("watertight") : L("notWatertight");
+    }
+    const stab = document.querySelector("#stability");
+    if (stab) {
+      const s = this.model.stability;
+      const pct = Math.max(0, Math.min(100, ((s.marginMm + 12) / 36) * 100));
+      stab.className = `stability ${s.stable ? "" : "bad"}`;
+      stab.innerHTML = `
+        <div class="stab-row"><span>${L("stability")}</span><strong>${s.stable ? L("stable") : L("unstable")}</strong></div>
+        <div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      `;
     }
     const tris = document.querySelector("#tris");
     if (tris) tris.textContent = `${L("triangles")}: ${this.model.triangleCount.toLocaleString()}`;
@@ -385,6 +517,10 @@ export class App {
     if (massEl) massEl.innerHTML = `${mass.toFixed(0)} <small>g</small>`;
     const cap = document.querySelector("#capacity");
     if (cap) cap.textContent = `${L("capacity")}: ${this.model.capacityMl.toFixed(0)} ml`;
+    const water = document.querySelector("#moat-water");
+    if (water) {
+      water.textContent = this.model.moatEnabled ? `${L("moatWater")}: ${this.model.moatWaterMl.toFixed(0)} ml` : "";
+    }
     const saved = document.querySelector(".saved");
     if (saved) saved.textContent = this.saved ? "✓ " + L("savedLocally") : L("unsaved");
   }
@@ -430,10 +566,19 @@ function labelFor(key: string): StringKey {
     innerDepth: "innerDepth",
     rimRadius: "rimRadius",
     tiltDeg: "tilt",
+    standHeight: "standHeight",
     wallThickness: "wallThickness",
     bottomThickness: "bottomThickness",
     mouthShrink: "mouthShrink",
     footHeight: "footHeight",
+    insertLipDiameter: "insertLipDiameter",
+    insertMouthDiameter: "insertMouthDiameter",
+    insertBaseDiameter: "insertBaseDiameter",
+    insertHeight: "insertHeight",
+    insertClearance: "insertClearance",
+    moatWidth: "moatWidth",
+    moatDepth: "moatDepth",
+    moatDistance: "moatDistance",
     fontSize: "fontSize",
     embossDepth: "embossDepth",
     ribCount: "ribCount",
@@ -448,7 +593,7 @@ function viewKey(view: CameraView): StringKey {
   return "viewSide";
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll('"', "&quot;");
 }
 

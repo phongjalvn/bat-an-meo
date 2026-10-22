@@ -77,5 +77,6 @@ export function exportFileStem(params: BowlParams): string {
   const h = Math.round(params.height);
   const w = params.wallThickness.toFixed(1).replace(".", "p");
   const name = params.text.trim().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
-  return `bowl_d${d}_h${h}_w${w}${name ? `_${name}` : ""}`;
+  const insert = Math.round(params.insertLipDiameter);
+  return `bowl_d${d}_h${h}_w${w}_i${insert}${name ? `_${name}` : ""}`;
 }

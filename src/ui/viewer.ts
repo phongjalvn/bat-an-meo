@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { BowlModel } from "../geometry/types";
+import type { BowlModel, PartName } from "../geometry/types";
 import { PART_COLORS } from "../geometry/types";
 
 export type CameraView = "3d" | "front" | "top" | "side";
@@ -89,10 +89,10 @@ export class BowlViewer {
     for (const part of model.parts) {
       const geom = toGeometry(part.mesh.positions, part.mesh.indices);
       geom.computeVertexNormals();
-      const color = part.name === "body" ? PART_COLORS.body : part.name === "base" ? PART_COLORS.base : PART_COLORS.text;
+      const color = colorOf(part.name);
       const mat = new THREE.MeshStandardMaterial({
         color,
-        roughness: part.name === "base" ? 0.72 : 0.38,
+        roughness: part.name === "moat" ? 0.55 : part.name === "base" || part.name === "stand" ? 0.72 : 0.38,
         metalness: part.name === "text" ? 0.08 : 0.02,
       });
       const mesh = new THREE.Mesh(geom, mat);
@@ -113,6 +113,8 @@ export class BowlViewer {
       mesh.rotation.x = -Math.PI / 2;
       this.group.add(mesh);
     }
+    const plateScale = Math.max(1, model.width / 220);
+    this.plate.scale.set(plateScale, plateScale, 1);
     this.drawDimensions(model);
     this.controls.target.set(0, model.height * 0.42, 0);
   }
@@ -122,9 +124,34 @@ export class BowlViewer {
     const d = model.depth;
     const h = model.height;
     const y0 = 0;
+    const insertR = model.insertRimMm / 2;
+    const rimY = Math.max(18, h - 8);
+
     addLine(this.dimGroup, [-w / 2, y0, -d / 2 - 8], [w / 2, y0, -d / 2 - 8]);
+    addLabel(this.dimGroup, `${w.toFixed(0)} mm`, 0, 6, -d / 2 - 14);
+
     addLine(this.dimGroup, [w / 2 + 8, y0, -d / 2], [w / 2 + 8, y0, d / 2]);
+    addLabel(this.dimGroup, `${d.toFixed(0)} mm`, w / 2 + 18, 6, 0);
+
     addLine(this.dimGroup, [-w / 2 - 10, y0, 0], [-w / 2 - 10, h, 0]);
+    addLabel(this.dimGroup, `${h.toFixed(0)} mm`, -w / 2 - 22, h * 0.5, 0);
+
+    addLine(this.dimGroup, [-insertR, rimY, 0], [insertR, rimY, 0]);
+    addLabel(this.dimGroup, `Ø ${model.insertRimMm.toFixed(0)} mm`, 0, rimY + 8, 0);
+    addLabel(this.dimGroup, `h ${model.insertHeightMm.toFixed(0)} mm`, insertR + 16, rimY - model.insertHeightMm * 0.4, 0);
+
+    if (model.tiltDeg > 0.05) {
+      addLabel(this.dimGroup, `${model.tiltDeg.toFixed(0)}°`, w * 0.28, h * 0.78, d * 0.18);
+    }
+    if (model.moatEnabled) {
+      addLabel(
+        this.dimGroup,
+        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} mm`,
+        0,
+        10,
+        d / 2 + 16,
+      );
+    }
   }
 
   private resize() {
@@ -149,6 +176,11 @@ export class BowlViewer {
   }
 }
 
+function colorOf(name: PartName): string {
+  if (name === "stand") return PART_COLORS.base;
+  return PART_COLORS[name] ?? PART_COLORS.body;
+}
+
 function toGeometry(positions: Float32Array, indices: Uint32Array): THREE.BufferGeometry {
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -162,4 +194,24 @@ function addLine(group: THREE.Group, a: number[], b: number[]) {
     new THREE.Vector3(b[0], b[1], b[2]),
   ]);
   group.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0x8b93a1 })));
+}
+
+function addLabel(group: THREE.Group, text: string, x: number, y: number, z: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = "600 28px IBM Plex Sans, Be Vietnam Pro, sans-serif";
+  ctx.fillStyle = "#d7dde6";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, 128, 32);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  spr.position.set(x, y, z);
+  spr.scale.set(42, 10.5, 1);
+  group.add(spr);
 }

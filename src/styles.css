@@ -134,6 +134,32 @@ input[type="range"] { width: 100%; accent-color: var(--ink); }
   cursor: pointer;
 }
 .pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.segs {
+  display: flex;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+.seg {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px 4px;
+  cursor: pointer;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.seg + .seg { border-left: 1px solid var(--line); }
+.seg.active { background: var(--ink); color: #fff; }
+.stability { margin: 12px 0 16px; }
+.stab-row { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+.stability .bar { height: 6px; background: #ece7dc; border-radius: 99px; overflow: hidden; }
+.stability .bar > i { display: block; height: 100%; background: var(--good); }
+.stability.bad .bar > i { background: #b3261e; }
+.stability.bad .stab-row strong { color: #b3261e; }
 .preset {
   width: 100%;
   text-align: left;
