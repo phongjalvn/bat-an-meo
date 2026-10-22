@@ -52,18 +52,21 @@ export function cloneIcons(icons: IconSlot[] | undefined): IconSlot[] {
 }
 
 export interface BowlParams {
+  /** Outer diameter at the top of the upward frustum. */
   bodyDiameter: number;
-  /** When true, top diameter follows the insert lip plus rim margin. */
+  /** When true, top, flare, height, tray, and deck follow the insert lip. */
   linkBodyToInsert: boolean;
-  /** Radial cream margin between the steel lip and the body top, mm. */
+  /** Kept so older projects still load. Sizing no longer uses this margin. */
   rimMargin: number;
   height: number;
   innerDepth: number;
   wallThickness: number;
   bottomThickness: number;
+  /** Radial upward flare: top radius minus foot radius, mm. */
   mouthShrink: number;
   trayDiameter: number;
   trayHeight: number;
+  /** Height of the tray deck the body foot sits on. */
   islandHeight: number;
   rimRadius: number;
   tiltDeg: number;
@@ -80,6 +83,8 @@ export interface BowlParams {
   insertClearance: number;
   insertLipThickness: number;
   antiSlipGroove: boolean;
+  /** Oval window through the front wall, near the foot. */
+  windowEnabled: boolean;
   text: string;
   textLine2: string;
   fontSize: number;
@@ -91,23 +96,23 @@ export interface BowlParams {
 }
 
 export const PARAM_LIMITS = {
-  bodyDiameter: { min: 90, max: 340, step: 1 },
+  bodyDiameter: { min: 90, max: 380, step: 1 },
   rimMargin: { min: 6, max: 16, step: 0.5 },
-  height: { min: 40, max: 180, step: 1 },
+  height: { min: 40, max: 220, step: 0.5 },
   innerDepth: { min: 15, max: 90, step: 1 },
   wallThickness: { min: 1.6, max: 8, step: 0.1 },
   bottomThickness: { min: 1.6, max: 10, step: 0.1 },
-  mouthShrink: { min: 0, max: 20, step: 0.5 },
+  mouthShrink: { min: 0, max: 40, step: 0.5 },
   trayDiameter: { min: 110, max: 420, step: 1 },
-  trayHeight: { min: 16, max: 70, step: 0.5 },
-  islandHeight: { min: 10, max: 80, step: 0.5 },
+  trayHeight: { min: 16, max: 130, step: 0.5 },
+  islandHeight: { min: 8, max: 90, step: 0.5 },
   rimRadius: { min: 0, max: 10, step: 0.1 },
   tiltDeg: { min: 0, max: 15, step: 0.5 },
-  moatWidth: { min: 8, max: 40, step: 0.5 },
+  moatWidth: { min: 3, max: 20, step: 0.5 },
   moatDepth: { min: 6, max: 22, step: 0.5 },
   moatGap: { min: 1, max: 24, step: 0.5 },
   fitClearance: { min: 0.2, max: 1.2, step: 0.05 },
-  insertLipDiameter: { min: 90, max: 240, step: 0.5 },
+  insertLipDiameter: { min: 90, max: 260, step: 0.5 },
   insertMouthDiameter: { min: 60, max: 220, step: 0.5 },
   insertBaseDiameter: { min: 40, max: 180, step: 0.5 },
   insertHeight: { min: 20, max: 80, step: 0.5 },
@@ -118,23 +123,23 @@ export const PARAM_LIMITS = {
 } as const;
 
 export const DEFAULT_PARAMS: BowlParams = {
-  bodyDiameter: 150,
+  bodyDiameter: 190,
   linkBodyToInsert: true,
   rimMargin: 10,
-  height: 103,
+  height: 102.9,
   innerDepth: 40,
   wallThickness: 3,
-  bottomThickness: 3,
-  mouthShrink: 9,
-  trayDiameter: 181,
-  trayHeight: 22,
-  islandHeight: 10,
-  rimRadius: 6,
+  bottomThickness: 2.4,
+  mouthShrink: 11,
+  trayDiameter: 190,
+  trayHeight: 60,
+  islandHeight: 25.7,
+  rimRadius: 2.2,
   tiltDeg: 15,
   moatEnabled: true,
-  moatWidth: 12,
+  moatWidth: 4.5,
   moatDepth: 10,
-  moatGap: 3,
+  moatGap: 2,
   fitClearance: 0.45,
   insertSize: "small",
   insertLipDiameter: 130,
@@ -144,6 +149,7 @@ export const DEFAULT_PARAMS: BowlParams = {
   insertClearance: 0.4,
   insertLipThickness: 1.4,
   antiSlipGroove: true,
+  windowEnabled: true,
   text: "Boom",
   textLine2: "30/04/2026",
   fontSize: 26,
@@ -229,24 +235,43 @@ export const MATERIALS: MaterialOption[] = [
   { id: "abs", density: 1.04 },
 ];
 
+/** Reference insert lip the measured STL proportions are built on. */
+export const REF_INSERT_LIP = 130;
+
+export function refScale(lipMm: number): number {
+  return Math.max(40, lipMm) / REF_INSERT_LIP;
+}
+
+function roundMm(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function clampLimit(value: number, lim: { min: number; max: number }): number {
+  return Math.min(lim.max, Math.max(lim.min, value));
+}
+
+/** Plastic lip opening. Ø146.6 on the reference body for a 130 mm insert lip. */
+export function lipOpeningDiameter(lipMm: number): number {
+  return roundMm(146.6 * refScale(lipMm));
+}
+
 export function minHolderDiameter(
   params: Pick<BowlParams, "insertLipDiameter" | "insertClearance" | "wallThickness">,
 ): number {
   return params.insertLipDiameter + 2 * params.wallThickness + 2 * params.insertClearance;
 }
 
-/** Smallest printable top diameter: lip plus a wall that can hold the fillet. */
+/** Top diameter must clear the lip opening, the wall, and a small fillet. */
 export function minTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "wallThickness">): number {
-  return params.insertLipDiameter + 2 * Math.max(4, params.wallThickness + 1.2);
+  return lipOpeningDiameter(params.insertLipDiameter) + 2 * params.wallThickness + 8;
 }
 
-/** Tray outer diameter is at least 10 mm larger than the body's wide base. */
-export function minTrayDiameter(params: Pick<BowlParams, "bodyDiameter" | "mouthShrink">): number {
-  return params.bodyDiameter + 2 * params.mouthShrink + 10;
-}
-
-export function autoTopDiameter(params: Pick<BowlParams, "insertLipDiameter" | "rimMargin">): number {
-  return params.insertLipDiameter + 2 * params.rimMargin;
+/** Tray outer diameter clears the foot, the wall, and a land for the moat. */
+export function minTrayDiameter(
+  params: Pick<BowlParams, "bodyDiameter" | "mouthShrink" | "wallThickness">,
+): number {
+  const foot = params.bodyDiameter - 2 * params.mouthShrink;
+  return foot + 2 * Math.max(1.6, params.wallThickness) + 12;
 }
 
 export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlParams {
@@ -260,19 +285,18 @@ export function applyInsertSize(params: BowlParams, size: InsertSizeId): BowlPar
     next.insertLipThickness = preset.lipThicknessMm;
   }
   next.innerDepth = next.insertHeight;
-  next.rimMargin = next.rimMargin || DEFAULT_PARAMS.rimMargin;
   if (next.linkBodyToInsert !== false) {
     next.linkBodyToInsert = true;
-    next.bodyDiameter = Math.max(minTopDiameter(next), autoTopDiameter(next));
-    next.trayDiameter = next.bodyDiameter + 2 * next.mouthShrink + 13;
-  } else {
-    next.bodyDiameter = Math.max(next.bodyDiameter, minTopDiameter(next));
-    next.trayDiameter = Math.max(next.trayDiameter, minTrayDiameter(next));
+    const s = refScale(next.insertLipDiameter);
+    next.bodyDiameter = clampLimit(roundMm(190 * s), PARAM_LIMITS.bodyDiameter);
+    next.mouthShrink = clampLimit(roundMm(11 * s), PARAM_LIMITS.mouthShrink);
+    next.height = clampLimit(roundMm(102.9 * s), PARAM_LIMITS.height);
+    next.trayDiameter = clampLimit(roundMm(190 * s), PARAM_LIMITS.trayDiameter);
+    next.trayHeight = clampLimit(roundMm(60 * s), PARAM_LIMITS.trayHeight);
+    next.islandHeight = clampLimit(roundMm(25.7 * s), PARAM_LIMITS.islandHeight);
   }
-  const tiltRad = (Math.max(0, next.tiltDeg) * Math.PI) / 180;
-  const lipZ = next.insertHeight + next.insertLipThickness;
-  const minH = Math.ceil(lipZ + next.bottomThickness + next.insertLipDiameter * Math.tan(tiltRad) + 12);
-  next.height = Math.max(next.height, minH);
+  next.bodyDiameter = clampLimit(Math.max(next.bodyDiameter, minTopDiameter(next)), PARAM_LIMITS.bodyDiameter);
+  next.trayDiameter = clampLimit(Math.max(next.trayDiameter, minTrayDiameter(next)), PARAM_LIMITS.trayDiameter);
   return next;
 }
 
@@ -345,6 +369,7 @@ export function normalizeParams(raw: LegacyInsert | undefined): BowlParams {
     insertClearance: incoming.insertClearance ?? DEFAULT_PARAMS.insertClearance,
     insertLipThickness: incoming.insertLipThickness ?? DEFAULT_PARAMS.insertLipThickness,
     antiSlipGroove: incoming.antiSlipGroove ?? DEFAULT_PARAMS.antiSlipGroove,
+    windowEnabled: incoming.windowEnabled ?? DEFAULT_PARAMS.windowEnabled,
     text: incoming.text ?? DEFAULT_PARAMS.text,
     textLine2: incoming.textLine2 ?? "",
     fontSize: incoming.fontSize ?? DEFAULT_PARAMS.fontSize,

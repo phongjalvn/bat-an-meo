@@ -25,13 +25,9 @@ export const PRESETS: Preset[] = [
     params: applyInsertSize(
       {
         ...DEFAULT_PARAMS,
-        height: 110,
-        trayHeight: 22,
-        islandHeight: 10,
         wallThickness: 3.2,
         bottomThickness: 3.2,
-        mouthShrink: 9,
-        rimRadius: 8,
+        rimRadius: 4,
         tiltDeg: 0,
         moatEnabled: false,
         text: "Buddy",
@@ -53,13 +49,9 @@ export const PRESETS: Preset[] = [
     params: applyInsertSize(
       {
         ...DEFAULT_PARAMS,
-        height: 118,
-        trayHeight: 22,
-        islandHeight: 10,
         wallThickness: 3.4,
         bottomThickness: 3.4,
-        mouthShrink: 9,
-        rimRadius: 8,
+        rimRadius: 4,
         tiltDeg: 0,
         moatEnabled: false,
         text: "Max",

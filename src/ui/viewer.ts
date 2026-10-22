@@ -146,7 +146,7 @@ export class BowlViewer {
     if (model.moatEnabled) {
       addLabel(
         this.dimGroup,
-        `${model.moatWidth.toFixed(0)}×${model.moatDepth.toFixed(0)} · gap ${model.moatGap.toFixed(0)} mm`,
+        `${model.moatWidth.toFixed(1)}×${model.moatDepth.toFixed(0)} · gap ${model.moatGap.toFixed(1)} mm`,
         0,
         18,
         d / 2 + 28,
